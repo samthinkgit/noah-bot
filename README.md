@@ -25,7 +25,7 @@ Si no tienes `uv`, instálalo siguiendo la guía oficial:
 1. Clona el repositorio:
 
 ```bash
-git clone <url-del-repo>
+git clone https://github.com/SamthinkGit/noah-bot.git
 cd noah-bot
 ````
 
@@ -64,3 +64,4 @@ Si todo está correcto, deberías ver algo como:
 ```
 Bot connected as Noah
 ```
+
