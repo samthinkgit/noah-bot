@@ -2,6 +2,73 @@ from typing import List
 import json
 from pathlib import Path
 from typing import Optional
+import discord
+
+
+class EmbedTable:
+    """
+    Render tables in Discord using embeds.
+
+    - Uses embeds (no markdown)
+    - Stable layout (max 3 columns per row)
+    - Automatically splits large tables
+    """
+
+    def __init__(
+        self,
+        headers: List[str],
+        title: str = None,
+        description: str = None,
+        color: discord.Color = discord.Color.blurple(),
+        max_columns: int = 3,
+    ):
+        self.headers = headers
+        self.rows: List[List[str]] = []
+        self.title = title
+        self.description = description
+        self.color = color
+        self.max_columns = max_columns
+
+    def add_row(self, row: List[str]) -> None:
+        self.rows.append([str(cell) for cell in row])
+
+    def render(self) -> discord.Embed:
+        embed = discord.Embed(
+            title=self.title,
+            description=self.description,
+            color=self.color,
+        )
+
+        if not self.rows:
+            embed.description = (embed.description or "") + "\n\n_No data available._"
+            return embed
+
+        # Convert rows → columns
+        columns = list(zip(*self.rows))
+
+        start = 0
+        total_columns = len(self.headers)
+
+        while start < total_columns:
+            end = start + self.max_columns
+
+            for header, column in zip(
+                self.headers[start:end],
+                columns[start:end],
+            ):
+                embed.add_field(
+                    name=header,
+                    value="\n".join(column),
+                    inline=True,
+                )
+
+            start = end
+
+            if start < total_columns:
+                embed.add_field(name="\u200b", value="\u200b", inline=False)
+
+        embed.set_footer(text=f"Rows: {len(self.rows)}")
+        return embed
 
 
 class DiscordChart:

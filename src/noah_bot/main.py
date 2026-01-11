@@ -3,14 +3,13 @@ import time
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
-from datetime import datetime
 
 
 from noah_bot.ai import AiResponder
-from noah_bot.discord_formatter import DiscordChart, UserEmojiManager
+from noah_bot.discord_formatter import DiscordChart, UserEmojiManager, EmbedTable
 
 from noah_bot.leaderboard import Leaderboard, generate_date
-from noah_bot.discord_formatter import DiscordChart
+from noah_bot.steallist import StealList
 
 
 def main():
@@ -32,6 +31,7 @@ def main():
     leaderboard = Leaderboard()
     emoji_manager = UserEmojiManager()
     ai_responder = AiResponder()
+    steallist = StealList()
 
     # Active timers per user
     timeit_sessions = {}
@@ -87,11 +87,11 @@ def main():
         if ctx.invoked_subcommand is None:
             await ctx.send("Use `.waifuracer help` or `.wfr help` to see commands.")
 
-    # ---------------- HELP ---------------- #
+    # ---------------- HELP ----------------GG#
 
     @waifuracer.command()
     async def help(ctx):
-        chart = DiscordChart(headers=["Command", "Description"])
+        chart = EmbedTable(headers=["Command", "Description"], title="Waifuracer Commands")
         chart.add_row(
             [".waifuracer add @user <time> [-tag tag]", "Add a new time record."]
         )
@@ -113,13 +113,10 @@ def main():
         chart.add_row(
             [".waifuracer setemoji <emoji>", "Set your claim reaction emoji."]
         )
-        chart.add_row([".noah ask <question>", "Ask a question to Noah AI."])
-        chart.add_row([".noah summary", "Summarize recent channel messages."])
         chart.add_row([".timeit", "Start a waifuracer timer."])
         chart.add_row([".claim", "Stop timer and show result."])
 
-        message = "Waifuracer Commands:\n" + chart.render()
-        await ctx.send(message)
+        await ctx.send(embed=chart.render())
 
     # ---------------- ELAPSED ---------------- #
 
@@ -290,6 +287,18 @@ def main():
             await ctx.send("Use `.noah ask <question>` to talk with Noah.")
 
     @noah.command()
+    async def help(ctx):  # noqa
+        chart = EmbedTable(
+            headers=["Command", "Description"],title="Noah AI Commands")
+        chart.add_row([".noah ask <question>", "Ask a question to Noah AI."])
+        chart.add_row([".noah summary", "Summarize recent channel messages."])
+        chart.add_row([".noah behonest <question>", "Ask Noah without filters."])
+        chart.add_row([".waifuracer help", "Show waifuracer commands."])
+        chart.add_row([".steallist help", "Show steallist commands."])
+
+        await ctx.send(embed=chart.render())
+
+    @noah.command()
     async def ask(ctx, *, question: str):
         """
         .noah ask <question>
@@ -332,6 +341,25 @@ def main():
 
         await ctx.send(summary)
 
+    @noah.command()
+    async def behonest(ctx, *, question: str):
+        """
+        .noah behonest <question>
+        """
+        await ctx.typing()
+
+        try:
+            response = ai_responder.ask_without_filters(question)
+        except Exception:
+            await ctx.send("❌ Lo siento, hubo un error al procesar tu solicitud.")
+            return
+
+        # Safety: Discord message length
+        if len(response) > 1900:
+            response = response[:1900] + "..."
+
+        await ctx.send(response)
+
     # ---------------- DEBUG HISTORY ---------------- #
     @bot.command()
     async def debug_history(ctx):
@@ -344,6 +372,80 @@ def main():
         await ctx.send(
             f"DEBUG: I can see **{len(messages)} messages** in this channel."
         )
+
+    # ---------------- STEAL LIST COMMANDS ---------------- #
+    @bot.group(name="steallist", aliases=["sl"])
+    async def steallist_cmd(ctx):
+        """
+        StealList commands.
+        """
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Use `.steallist help` or `.sl help` to see commands.")
+
+    @steallist_cmd.command()
+    async def help(ctx):  # noqa
+        chart = EmbedTable(headers=["Command", "Description"], title="StealList Commands")
+        chart.add_row(
+            [".steallist add @user <waifu>", "Add a waifu to your steal list."]
+        )
+        chart.add_row([".steallist show", "Show your pending steals."])
+        chart.add_row([".steallist show @user", "Show waifus stolen from a user."])
+        chart.add_row([".steallist remove <id>", "Remove a waifu by ID."])
+        chart.add_row(
+            [".steallist clear @user", "Clear all waifus owned by you from that user."]
+        )
+
+        await ctx.send(embed=chart.render())
+
+    @steallist_cmd.command()
+    async def add(ctx, user: discord.Member, *waifu_words: str):  # noqa
+        waifu_name = " ".join(waifu_words).strip()
+        record_id = steallist.add_waifu(
+            owner_id=ctx.author.id,
+            owner_name=ctx.author.display_name,
+            target_id=user.id,
+            target_name=user.display_name,
+            waifu_name=waifu_name,
+        )
+
+        await ctx.send(
+            f"🗡️ `{waifu_name}` added to your steal list from {user.mention} "
+            f"(ID `{record_id}`)"
+        )
+
+    @steallist_cmd.command()
+    async def show(ctx, user: discord.Member = None):
+        records = steallist.get_by_owner(ctx.author.id)
+        embed = steallist.render_embed(
+            records,
+            title="🗡️ Steal List",
+            subtitle=f"{ctx.author.display_name}'s pending waifus",
+        )
+        await ctx.send(embed=embed)
+
+    @steallist_cmd.command()
+    async def remove(ctx, record_id: int):  # noqa
+        record = steallist.get_by_id(record_id)
+
+        if not record:
+            await ctx.send("Record not found.")
+            return
+
+        if record["owner_id"] != ctx.author.id:
+            await ctx.send("❌ You can only remove your own waifus.")
+            return
+
+        steallist.remove_by_id(record_id)
+        await ctx.send(f"Removed `{record['waifu_name']}` from your steal list.")
+
+    @steallist_cmd.command()
+    async def clear(ctx, user: discord.Member):
+        count = steallist.clear_owner(ctx.author.id)
+
+        if count == 0:
+            await ctx.send("Nothing to clear.")
+        else:
+            await ctx.send(f"🧹 Cleared `{count}` waifus from your steal list.")
 
     # ---------------- RUN ---------------- #
 
