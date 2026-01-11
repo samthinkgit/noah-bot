@@ -122,18 +122,15 @@ class StealList:
         ids = []
         waifus = []
         from_users = []
-        dates = []
 
         for r in records:
             ids.append(str(r["id"]))
             waifus.append(r["waifu_name"])
             from_users.append(r["target_name"])
-            dates.append(r["created_at"])
 
         embed.add_field(name="ID", value="\n".join(ids), inline=True)
         embed.add_field(name="Waifu", value="\n".join(waifus), inline=True)
         embed.add_field(name="From", value="\n".join(from_users), inline=True)
-        embed.add_field(name="Date", value="\n".join(dates), inline=True)
 
         embed.set_footer(text=f"Total: {len(records)} waifus")
 
