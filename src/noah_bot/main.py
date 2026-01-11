@@ -287,12 +287,21 @@ def main():
             await ctx.send("Use `.noah ask <question>` to talk with Noah.")
 
     @noah.command()
+    async def ping(ctx):
+        """
+        .noah ping
+        Check if Noah is responsive.
+        """
+        await ctx.send("Im alive! 🖤")
+
+    @noah.command()
     async def help(ctx):  # noqa
         chart = EmbedTable(
             headers=["Command", "Description"],title="Noah AI Commands")
         chart.add_row([".noah ask <question>", "Ask a question to Noah AI."])
         chart.add_row([".noah summary", "Summarize recent channel messages."])
         chart.add_row([".noah behonest <question>", "Ask Noah without filters."])
+        chart.add_row([".waifuracer help", "Show waifuracer commands."])
         chart.add_row([".waifuracer help", "Show waifuracer commands."])
         chart.add_row([".steallist help", "Show steallist commands."])
 
