@@ -12,6 +12,7 @@ dependencies = [
     "dotenv>=0.9.9",
     "langchain>=1.2.3",
     "langchain-openai>=1.1.7",
+    "pillow>=12.1.0",
     "tinydb>=4.8.2",
 ]
 
@@ -21,3 +22,8 @@ noah-bot = "noah_bot:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "rich>=14.2.0",
+]

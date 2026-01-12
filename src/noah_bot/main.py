@@ -5,8 +5,9 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 
+from io import BytesIO
 from noah_bot.ai import AiResponder
-from noah_bot.discord_formatter import DiscordChart, UserEmojiManager, EmbedTable
+from noah_bot.discord_formatter import DiscordChart, UserEmojiManager, EmbedTable, DiscordImageRenderer
 
 from noah_bot.leaderboard import Leaderboard, generate_date
 from noah_bot.steallist import StealList
@@ -45,7 +46,7 @@ def main():
 
     # ---------------- TIMEIT / CLAIM ---------------- #
 
-    @bot.command()
+    @bot.command(aliases=["ti"])
     async def timeit(ctx):
         global latest_time_it
         """
@@ -91,7 +92,9 @@ def main():
 
     @waifuracer.command()
     async def help(ctx):
-        chart = EmbedTable(headers=["Command", "Description"], title="Waifuracer Commands")
+        chart = EmbedTable(
+            headers=["Command", "Description"], title="Waifuracer Commands"
+        )
         chart.add_row(
             [".waifuracer add @user <time> [-tag tag]", "Add a new time record."]
         )
@@ -284,7 +287,7 @@ def main():
         Noah AI commands.
         """
         if ctx.invoked_subcommand is None:
-            await ctx.send("Use `.noah ask <question>` to talk with Noah.")
+            await ctx.send("Use `.noah help` to see commands.")
 
     @noah.command()
     async def ping(ctx):
@@ -296,11 +299,13 @@ def main():
 
     @noah.command()
     async def help(ctx):  # noqa
-        chart = EmbedTable(
-            headers=["Command", "Description"],title="Noah AI Commands")
+        chart = EmbedTable(headers=["Command", "Description"], title="Noah AI Commands")
         chart.add_row([".noah ask <question>", "Ask a question to Noah AI."])
         chart.add_row([".noah summary", "Summarize recent channel messages."])
         chart.add_row([".noah behonest <question>", "Ask Noah without filters."])
+        chart.add_row([".noah merge", "Render all images from a replied message."])
+        chart.add_row([".noah ping", "Check if Noah is responsive."])
+        chart.add_row([".noah help", "Show Noah AI commands."])
         chart.add_row([".waifuracer help", "Show waifuracer commands."])
         chart.add_row([".waifuracer help", "Show waifuracer commands."])
         chart.add_row([".steallist help", "Show steallist commands."])
@@ -369,6 +374,62 @@ def main():
 
         await ctx.send(response)
 
+    # ---------------- GET IMAGES FROM REPLIED MESSAGE ---------------- #
+
+    @noah.command()
+    async def merge(ctx):
+        """
+        .merge
+        Reply to a message from another bot and Noah will render all embed images
+        into a single beautiful image.
+        """
+        await ctx.typing()
+        if not ctx.message.reference:
+            await ctx.send("❌ You must reply to a message containing embeds.")
+            return
+
+        try:
+            replied_msg = await ctx.channel.fetch_message(
+                ctx.message.reference.message_id
+            )
+        except discord.NotFound:
+            await ctx.send("❌ Original message not found.")
+            return
+
+        images = []
+
+        for i, embed in enumerate(replied_msg.embeds, start=1):
+            if embed.image and embed.image.url:
+                images.append(
+                    {
+                        "title": embed.title or f"Image {i}",
+                        "url": embed.image.url,
+                    }
+                )
+
+            if embed.thumbnail and embed.thumbnail.url:
+                images.append(
+                    {
+                        "title": (embed.title or f"Image {i}") + " (thumb)",
+                        "url": embed.thumbnail.url,
+                    }
+                )
+
+        if not images:
+            await ctx.send("❌ No images found in the embeds.")
+            return
+
+        renderer = DiscordImageRenderer()
+        final_image = renderer.render(images)
+
+        buffer = BytesIO()
+        final_image.save(buffer, format="PNG")
+        buffer.seek(0)
+
+        await ctx.send(
+            file=discord.File(buffer, filename="rendered_images.png")
+        )
+
     # ---------------- DEBUG HISTORY ---------------- #
     @bot.command()
     async def debug_history(ctx):
@@ -393,7 +454,9 @@ def main():
 
     @steallist_cmd.command()
     async def help(ctx):  # noqa
-        chart = EmbedTable(headers=["Command", "Description"], title="StealList Commands")
+        chart = EmbedTable(
+            headers=["Command", "Description"], title="StealList Commands"
+        )
         chart.add_row(
             [".steallist add @user <waifu>", "Add a waifu to your steal list."]
         )
@@ -456,6 +519,27 @@ def main():
         else:
             await ctx.send(f"🧹 Cleared `{count}` waifus from your steal list.")
 
+
+    @bot.command()
+    async def test_image(ctx):
+        """
+        .test_image
+        Sends a message with 3 example images using embeds.
+        """
+        image_urls = [
+            "https://i.blogs.es/8dee66/anime/500_333.jpeg"
+            "https://placebear.com/400/300",
+            "https://picsum.photos/400/300",
+        ]
+
+        embeds = []
+        for idx, url in enumerate(image_urls, start=1):
+            embed = discord.Embed(title=f"Test Image {idx}")
+            embed.set_image(url=url)
+            embeds.append(embed)
+
+        for embed in embeds:
+            await ctx.send(embed=embed)
     # ---------------- RUN ---------------- #
 
     bot.run(TOKEN)

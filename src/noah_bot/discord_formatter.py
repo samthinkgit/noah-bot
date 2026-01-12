@@ -1,3 +1,6 @@
+from PIL import Image, ImageDraw, ImageFont
+import requests
+from io import BytesIO
 from typing import List
 import json
 from pathlib import Path
@@ -168,3 +171,97 @@ class UserEmojiManager:
             self._save()
             return True
         return False
+
+
+class DiscordImageRenderer:
+    def __init__(
+        self,
+        background_color=(255, 255, 255),
+        padding=40,
+        image_size=(300, 300),
+        title_height=40,
+    ):
+        self.background_color = background_color
+        self.padding = padding
+        self.image_size = image_size
+        self.title_height = title_height
+
+        try:
+            self.font = ImageFont.truetype("arial.ttf", 20)
+        except Exception:
+            self.font = ImageFont.load_default()
+
+    def _download_image(self, url: str) -> Image.Image:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        img = Image.open(BytesIO(response.content)).convert("RGB")
+        return img
+
+    def render(self, images: list[dict]) -> Image.Image:
+        count = len(images)
+        if count == 0:
+            return Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+
+        cols = count
+        rows = 1
+
+        # Calculamos el ancho y alto total
+        canvas_width = cols * self.image_size[0] + (cols + 1) * self.padding
+        canvas_height = (
+            rows * (self.image_size[1] + self.title_height) + (rows + 1) * self.padding
+        )
+
+        # 1. Fondo transparente usando "RGBA" y color (0,0,0,0)
+        canvas = Image.new("RGBA", (canvas_width, canvas_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(canvas)
+
+        for idx, data in enumerate(images):
+            col = idx % cols
+            row = idx // cols
+
+            x = self.padding + col * (self.image_size[0] + self.padding)
+            y = self.padding + row * (
+                self.image_size[1] + self.title_height + self.padding
+            )
+
+            # Descarga y redimensionado
+            img = self._download_image(data["url"]).convert("RGBA")
+            img.thumbnail(self.image_size)
+
+            # Centrar imagen en su celda
+            img_x = x + (self.image_size[0] - img.width) // 2
+            img_y = y
+
+            # 2. Dibujar el banner blanco detrás del texto
+            # El banner ocupará todo el ancho de la celda debajo de la imagen
+            banner_rect = [
+                x,
+                img_y + self.image_size[1],
+                x + self.image_size[0],
+                img_y + self.image_size[1] + self.title_height,
+            ]
+            draw.rectangle(banner_rect, fill="white")
+
+            # Pegar la imagen (usamos la propia imagen como máscara para mantener su transparencia)
+            canvas.paste(img, (img_x, img_y), img)
+
+            # Configurar y dibujar el texto
+            title = data.get("title", "")
+            bbox = draw.textbbox((0, 0), title, font=self.font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+
+            # Centrar texto en el banner
+            text_x = x + (self.image_size[0] - text_width) // 2
+            text_y = (
+                banner_rect[1] + (self.title_height - text_height) // 2 - 2
+            )  # Ajuste fino vertical
+
+            draw.text(
+                (text_x, text_y),
+                title,
+                fill="black",  # Fuente negra pura
+                font=self.font,
+            )
+
+        return canvas
