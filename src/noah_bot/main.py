@@ -7,7 +7,14 @@ from dotenv import load_dotenv
 
 from io import BytesIO
 from noah_bot.ai import AiResponder
-from noah_bot.discord_formatter import DiscordChart, UserEmojiManager, EmbedTable, DiscordImageRenderer
+from noah_bot.discord_formatter import (
+    DiscordChart,
+    UserEmojiManager,
+    EmbedTable,
+    DiscordImageRenderer,
+)
+from noah_bot.waifu_game import WaifuGameManager
+
 
 from noah_bot.leaderboard import Leaderboard, generate_date
 from noah_bot.steallist import StealList
@@ -33,6 +40,7 @@ def main():
     emoji_manager = UserEmojiManager()
     ai_responder = AiResponder()
     steallist = StealList()
+    waifu_manager = WaifuGameManager(json_path="waifu_game.json")
 
     # Active timers per user
     timeit_sessions = {}
@@ -426,9 +434,333 @@ def main():
         final_image.save(buffer, format="PNG")
         buffer.seek(0)
 
-        await ctx.send(
-            file=discord.File(buffer, filename="rendered_images.png")
+        await ctx.send(file=discord.File(buffer, filename="rendered_images.png"))
+
+    # ---------------- WAIFU GAME ---------------- #
+    @noah.group()
+    async def waifu(ctx):
+        """
+        Waifu battle commands.
+        """
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Use `.noah waifu help` to see commands.")
+
+    @waifu.command()
+    async def set(ctx, *, args: str):
+        """
+        .noah waifu set <name> -special <special name>
+        """
+        if "-special" not in args:
+            await ctx.send("❌ Usage: `.noah waifu set <name> -special <special name>`")
+            return
+
+        name, special = args.split("-special", 1)
+        name = name.strip()
+        special = special.strip()
+
+        result = waifu_manager.waifu_set(
+            user_id=str(ctx.author.id),
+            waifu_name=name,
+            special_name=special,
         )
+
+        if not result["ok"]:
+            await ctx.send(f"❌ {result['message']}")
+            return
+
+        w = result["waifu"]
+        stats = w["stats"]
+
+        table = EmbedTable(
+            headers=["Stat", "Value"],
+            title=f"🖤 {w['name']} created",
+        )
+
+        table.add_row(["Health", f"{w['hp']} / {w['max_hp']}"])
+        table.add_row(["Agility", stats["agility"]])
+        table.add_row(["Mana", stats["mana"]])
+        table.add_row(["Recover", stats["recover"]])
+        table.add_row(["Damage", f"{stats['hit_damage']}"])
+
+        table.add_row(["Dodge Chance", f"{int(stats['dodge_chance'] * 100)}%"])
+        table.add_row(["Special Chance", f"{int(stats['special_chance'] * 100)}%"])
+        table.add_row(["Cooldown", f"{stats['cooldown_seconds'] // 60} min"])
+        table.add_row(["Special Name", w["special_name"]])
+
+        await ctx.send(embed=table.render())
+
+    @waifu.command()
+    async def setimage(ctx):
+        """
+        .noah waifu setimage
+        Must reply to a message containing an embed image.
+        """
+        if not ctx.message.reference:
+            await ctx.send("❌ You must reply to a message with an embed image.")
+            return
+
+        replied = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+
+        image_url = None
+
+        for embed in replied.embeds:
+            if embed.image and embed.image.url:
+                image_url = embed.image.url
+                break
+            if embed.thumbnail and embed.thumbnail.url:
+                image_url = embed.thumbnail.url
+                break
+
+        if not image_url:
+            await ctx.send("❌ No image found in the replied embed.")
+            return
+
+        result = waifu_manager.waifu_set_image(
+            str(ctx.author.id),
+            image_url,
+        )
+
+        if not result["ok"]:
+            await ctx.send(f"❌ {result['message']}")
+            return
+
+        await ctx.send("🖼️ Waifu image set successfully!")
+
+    @waifu.command()
+    async def remaining(ctx):
+        """
+        .noah waifu remaining
+        Shows remaining cooldown time before next attack.
+        """
+        w = waifu_manager.get_waifu(str(ctx.author.id))
+
+        if not w:
+            await ctx.send("❌ You don't have a waifu.")
+            return
+
+        if not w.alive:
+            await ctx.send("☠️ Your waifu is dead.")
+            return
+
+        table = EmbedTable(
+            headers=["Info", "Value"],
+            title="⏳ Attack Cooldown",
+        )
+
+        # Dev mode bypass
+        if waifu_manager.devmode:
+            table.add_row(["Dev Mode", "ON 🛠️"])
+            table.add_row(["Status", "Ready to attack"])
+            table.add_row(["Remaining", "0 seconds"])
+        else:
+            if not w.last_attack_at:
+                table.add_row(["Status", "Ready to attack"])
+                table.add_row(["Remaining", "0 seconds"])
+            else:
+                cooldown = w.stats.cooldown_seconds()
+                elapsed = int((time.time() - w.last_attack_at.timestamp()))
+                remaining = max(0, cooldown - elapsed)
+
+                table.add_row(["Cooldown", f"{cooldown // 60} min"])
+                table.add_row(["Elapsed", f"{elapsed // 60} min {elapsed % 60} sec"])
+
+                if remaining == 0:
+                    table.add_row(["Status", "Ready to attack"])
+                    table.add_row(["Remaining", "0 seconds"])
+                else:
+                    table.add_row(["Status", "Recovering ⏳"])
+                    table.add_row(
+                        [
+                            "Remaining",
+                            f"{remaining // 60} min {remaining % 60} sec",
+                        ]
+                    )
+
+        embed = table.render()
+
+        if w.image_url:
+            embed.set_image(url=w.image_url)
+
+        await ctx.send(embed=embed)
+
+    @waifu.command()
+    async def attack(ctx, user: discord.Member):
+        """
+        .noah waifu attack @user
+        """
+        result = waifu_manager.waifu_attack(
+            attacker_id=str(ctx.author.id),
+            defender_id=str(user.id),
+        )
+
+        if not result["ok"]:
+            await ctx.send(f"❌ {result['message']}")
+            return
+
+        table = EmbedTable(
+            headers=["Event", "Result"],
+            title="⚔️ Waifu Battle",
+        )
+        table.description = (
+            f"**{str(ctx.author.display_name)}** attacked **{str(user.display_name)}**!"
+        )
+
+        table.add_row(["Dodged", "Yes 💨" if result["dodged"] else "No"])
+
+        if not result["dodged"]:
+            table.add_row(["**Damage**", f"{result['damage']}"])
+
+            if result["special"]:
+                table.add_row(["Special", f"💥 {result['special_name']}"])
+
+            table.add_row(["**Defender HP**", result["defender_hp_after"]])
+
+            if result["stunned_applied"]:
+                table.add_row(["Stun", "Yes 😵"])
+
+            if result["killed"]:
+                table.add_row(["Death", "☠️ Permanent"])
+                table.add_row(["Reward", "Full heal + Level Up"])
+
+        w = waifu_manager.get_waifu(str(ctx.author.id))
+        if w.image_url:
+            embed = table.render()
+            embed.set_image(url=w.image_url)
+            await ctx.send(embed=embed)
+            return
+
+        await ctx.send(embed=table.render())
+
+    @waifu.command()
+    async def sleep(ctx):
+        """
+        .noah waifu sleep
+        """
+        result = waifu_manager.waifu_sleep(str(ctx.author.id))
+
+        if not result["ok"]:
+            await ctx.send(f"❌ {result['message']}")
+            return
+
+        table = EmbedTable(
+            headers=["Info", "Value"],
+            title="😴 Waifu Rest",
+        )
+
+        table.add_row(["HP Before", result["hp_before"]])
+        table.add_row(["HP After", result["hp_after"]])
+        table.add_row(["Max HP", result["max_hp"]])
+        table.add_row(["Recovered", result["healed"]])
+
+        w = waifu_manager.get_waifu(str(ctx.author.id))
+        if w.image_url:
+            embed = table.render()
+            embed.set_image(url=w.image_url)
+            await ctx.send(embed=embed)
+            return
+
+        await ctx.send(embed=table.render())
+
+    @waifu.command()
+    async def levelup(ctx):
+        """
+        .noah waifu levelup
+        """
+        result = waifu_manager.waifu_levelup(str(ctx.author.id))
+
+        if not result["ok"]:
+            await ctx.send(f"❌ {result['message']}")
+            return
+
+        table = EmbedTable(
+            headers=["Field", "Value"],
+            title="⬆️ Level Up!",
+        )
+        table.add_row(["Upgraded Stat", result["chosen_stat"]])
+        table.add_row(["Pending Levelups", result["pending_levelups_left"]])
+        table.add_row(
+            ["Max HP", f"{result['max_hp_before']} → {result['max_hp_after']}"]
+        )
+        w = waifu_manager.get_waifu(str(ctx.author.id))
+        if w.image_url:
+            embed = table.render()
+            embed.set_image(url=w.image_url)
+            await ctx.send(embed=embed)
+            return
+
+        await ctx.send(embed=table.render())
+
+    @waifu.command()
+    async def status(ctx):
+        """
+        .noah waifu status
+        """
+        w = waifu_manager.get_waifu(str(ctx.author.id))
+
+        if not w:
+            await ctx.send("❌ You don't have a waifu.")
+            return
+
+        table = EmbedTable(
+            headers=["Stat", "Value"],
+            title=f"📊 {w.name} Status",
+        )
+
+        table.add_row(["Alive", "Yes 🖤" if w.alive else "No ☠️"])
+        table.add_row(["HP", f"{w.current_hp} / {w.max_hp()}"])
+        table.add_row(["Health", w.stats.health])
+        table.add_row(["Agility", w.stats.agility])
+        table.add_row(["Mana", w.stats.mana])
+        table.add_row(["Recover", w.stats.recover])
+        table.add_row(["Damage", w.stats.hit_damage()])
+        table.add_row(["Cooldown", f"{w.stats.cooldown_seconds() // 60} min"])
+        table.add_row(["Stunned", "Yes 😵" if w.is_stunned(None) else "No"])
+        table.add_row(["Special", w.special_name])
+        table.add_row(["Pending Levelups", w.pending_levelups])
+
+        w = waifu_manager.get_waifu(str(ctx.author.id))
+        if w.image_url:
+            embed = table.render()
+            embed.set_image(url=w.image_url)
+            await ctx.send(embed=embed)
+            return
+
+        await ctx.send(embed=table.render())
+
+    @waifu.command()
+    async def help(ctx, user: discord.Member = None):  # noqa
+        """
+        .noah waifu help
+        """
+        chart = EmbedTable(headers=["Command"], title="Waifu Game Commands")
+        chart.add_row(
+            [
+                ".noah waifu set <name> -special <special name>: Create your waifu with a special attack.",
+            ]
+        )
+        chart.add_row([".noah waifu status: Show your waifu's current status."])
+        chart.add_row([".noah waifu attack @user: Attack another user's waifu."])
+        chart.add_row([".noah waifu sleep: Rest and recover HP."])
+        chart.add_row(
+            [".noah waifu levelup: Use a pending level up to upgrade a stat."]
+        )
+        chart.add_row([".noah waifu remaining: Show remaining cooldown before next attack."])
+        chart.add_row(
+            [".noah waifu setimage: Set your waifu's image from a replied embed."]
+        )
+        chart.add_row([".noah waifu help: Show waifu game commands."])
+
+        await ctx.send(embed=chart.render())
+
+    @waifu.command()
+    async def setdevmode(ctx, value: str):
+        """
+        .setdevmode on/off
+        """
+        enabled = value.lower() in ("on", "true", "1", "yes")
+
+        waifu_manager.set_devmode(enabled)
+        await ctx.send(f"🛠️ Dev mode set to `{enabled}`")
 
     # ---------------- DEBUG HISTORY ---------------- #
     @bot.command()
@@ -519,7 +851,6 @@ def main():
         else:
             await ctx.send(f"🧹 Cleared `{count}` waifus from your steal list.")
 
-
     @bot.command()
     async def test_image(ctx):
         """
@@ -540,6 +871,7 @@ def main():
 
         for embed in embeds:
             await ctx.send(embed=embed)
+
     # ---------------- RUN ---------------- #
 
     bot.run(TOKEN)
