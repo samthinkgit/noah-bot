@@ -480,7 +480,7 @@ def main():
         table.add_row(["🤸‍♀️ **Agility**: " + str(stats["agility"])])
         table.add_row(["🔮 **Mana**: " + str(stats["mana"])])
         table.add_row(["💪 **Recover**: " + str(stats["recover"])])
-        table.add_row(["🗡️ **Damage**: " + f"{stats['hit_damage']}"])
+        table.add_row(["🗡️ **Damage**: " + f"{stats['hit_damage']}" + "\n"])
         table.add_row(["**Dodge Chance**: " + f"{int(stats['dodge_chance'] * 100)}%"])
         table.add_row(
             ["**Special Chance**: " + f"{int(stats['special_chance'] * 100)}%"]
@@ -531,7 +531,7 @@ def main():
     async def remaining(ctx):
         """
         .noah waifu remaining
-        Shows remaining cooldown time before next attack.
+        Shows remaining cooldown time or incapacitation time.
         """
         w = waifu_manager.get_waifu(str(ctx.author.id))
 
@@ -539,35 +539,43 @@ def main():
             await ctx.send("❌ You don't have a waifu.")
             return
 
-        if not w.alive:
-            await ctx.send("☠️ Your waifu is dead.")
-            return
+        now = time.time()
 
         table = EmbedTable(
             headers=["Info"],
-            title="⏳ Attack Cooldown",
+            title="⏳ Waifu Status",
         )
 
-        # Dev mode bypass
-        if waifu_manager.devmode:
-            table.add_row(["**Dev Mode**: " + "ON 🛠️"])
-            table.add_row(["**Status**: " + "Ready to attack"])
-            table.add_row(["**Remaining**: " + "0 seconds"])
+        # Incapacitated
+        if w.incapacitated_until and not waifu_manager.devmode:
+            remaining = int(w.incapacitated_until.timestamp() - now)
+            if remaining > 0:
+                table.add_row(["**Status**: Incapacitated 🩸"])
+                table.add_row(
+                    [
+                        "**Recovery In**: "
+                        + f"{remaining // 3600}h {(remaining % 3600) // 60}m",
+                    ]
+                )
+            else:
+                table.add_row(["**Status**: Ready"])
         else:
-            if not w.last_attack_at:
-                table.add_row(["**Status**: " + "Ready to attack"])
-                table.add_row(["**Remaining**: " + "0 seconds"])
+            # Cooldown logic
+            if waifu_manager.devmode or not w.last_attack_at:
+                table.add_row(["**Status**: Ready to attack"])
+                table.add_row(["**Remaining**: 0 seconds"])
             else:
                 cooldown = w.stats.cooldown_seconds()
-                elapsed = int((time.time() - w.last_attack_at.timestamp()))
+                elapsed = int(now - w.last_attack_at.timestamp())
                 remaining = max(0, cooldown - elapsed)
 
                 table.add_row(["**Cooldown**: " + f"{cooldown // 60} min"])
+
                 if remaining == 0:
-                    table.add_row(["**Status**: " + "Ready to attack"])
-                    table.add_row(["**Remaining**: " + "0 seconds"])
+                    table.add_row(["**Status**: Ready to attack"])
+                    table.add_row(["**Remaining**: 0 seconds"])
                 else:
-                    table.add_row(["**Status**: " + "Recovering ⏳"])
+                    table.add_row(["**Status**: Recovering ⏳"])
                     table.add_row(
                         [
                             "**Remaining**: "
@@ -576,7 +584,6 @@ def main():
                     )
 
         embed = table.render()
-
         if w.image_url:
             embed.set_image(url=w.image_url)
 
@@ -619,7 +626,7 @@ def main():
                 table.add_row(["**Stun**: " + "Yes 😵"])
 
             if result["killed"]:
-                table.add_row(["**Death**: " + "☠️ Permanent"])
+                table.add_row(["**Status**: 🩸 Incapacitated (24h)"])
                 table.add_row(["**Reward**: Full heal + Level Up"])
 
         w = waifu_manager.get_waifu(str(ctx.author.id))
@@ -699,30 +706,82 @@ def main():
             await ctx.send("❌ You don't have a waifu.")
             return
 
+        now = time.time()
+
         table = EmbedTable(
             headers=["Stat"],
             title=f"📊 {w.name} Status",
         )
 
-        table.add_row(["**Alive**: " + ("Yes 🖤" if w.alive else "No ☠️")])
+        if w.incapacitated_until:
+            remaining = int(w.incapacitated_until.timestamp() - now)
+            if remaining > 0:
+                table.add_row(["**Status**: 🩸 Incapacitated"])
+                table.add_row(
+                    [
+                        "**Recovery In**: "
+                        + f"{remaining // 3600}h {(remaining % 3600) // 60}m\n",
+                    ]
+                )
+            else:
+                table.add_row(["**Status**: Ready\n"])
+        else:
+            table.add_row(["**Status**: Active\n"])
+
         table.add_row(["❤️ **HP**: " + f"{w.current_hp} / {w.max_hp()}"])
         table.add_row(["🤸‍♀️ **Agility**: " + str(w.stats.agility)])
         table.add_row(["🔮 **Mana**: " + str(w.stats.mana)])
         table.add_row(["💪 **Recover**: " + str(w.stats.recover)])
         table.add_row(["🗡️ **Damage**: " + str(w.stats.hit_damage())])
-        table.add_row(["⏳ **Cooldown**: " + f"{w.stats.cooldown_seconds() // 60} min"])
+        table.add_row(
+            ["⏳ **Cooldown**: " + f"{w.stats.cooldown_seconds() // 60} min\n"]
+        )
         table.add_row(["**Stunned**: " + ("Yes 😵" if w.is_stunned_now() else "No")])
         table.add_row(["**Special**: " + w.special_name])
         table.add_row(["**Pending Levelups**: " + str(w.pending_levelups)])
 
-        w = waifu_manager.get_waifu(str(ctx.author.id))
+        embed = table.render()
         if w.image_url:
-            embed = table.render()
             embed.set_image(url=w.image_url)
-            await ctx.send(embed=embed)
+
+        await ctx.send(embed=embed)
+
+    @waifu.command()
+    async def alive(ctx):
+        """
+        .noah waifu alive
+        Checks if waifu can be reactivated after incapacitation.
+        """
+        w = waifu_manager.get_waifu(str(ctx.author.id))
+
+        if not w:
+            await ctx.send("❌ You don't have a waifu.")
             return
 
-        await ctx.send(embed=table.render())
+        now = time.time()
+
+        if not w.incapacitated_until:
+            await ctx.send("🖤 Your waifu is already active.")
+            return
+
+        remaining = int(w.incapacitated_until.timestamp() - now)
+
+        if remaining > 0:
+            await ctx.send(
+                f"🩸 Your waifu is still incapacitated for "
+                f"{remaining // 3600}h {(remaining % 3600) // 60}m."
+            )
+            return
+
+        # Force recovery
+        w.incapacitated_until = None
+        w.current_hp = w.max_hp()
+        waifu_manager._state["users"][str(ctx.author.id)] = (
+            waifu_manager._serialize_waifu(w)
+        )
+        waifu_manager._save()
+
+        await ctx.send("✨ Your waifu has recovered and is alive again!")
 
     @waifu.command()
     async def help(ctx, user: discord.Member = None):  # noqa
@@ -744,6 +803,7 @@ def main():
         chart.add_row(
             [".noah waifu remaining: Show remaining cooldown before next attack."]
         )
+        chart.add_row([".noah waifu alive: Check if your waifu can be reactivated."])
         chart.add_row(
             [".noah waifu setimage: Set your waifu's image from a replied embed."]
         )
