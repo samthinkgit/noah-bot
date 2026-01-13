@@ -773,28 +773,29 @@ def main():
                 await ctx.send("😵 Your waifu is stunned and cannot train today.")
                 return
 
-        # Read raw state to store daily usage
-        raw = waifu_manager._state["users"].get(str(ctx.author.id))
+        # Read last daily date safely
+        raw = waifu_manager._state["users"].get(str(ctx.author.id), {})
         last_daily = raw.get("last_daily_date")
 
         if last_daily == today and not waifu_manager.devmode:
             await ctx.send("⏳ You already used your daily training today.")
             return
 
-        # Random stat
+        # Pick random stat
         stat = random.choice(["health", "agility", "mana", "recover", "damage"])
         before = getattr(w.stats, stat)
         after = min(30, before + 1)
         setattr(w.stats, stat, after)
 
-        # Adjust HP if health increased
+        # If health increased, adjust HP cap safely
         if stat == "health":
             w.current_hp = min(w.current_hp, w.max_hp())
 
-        # Persist
-        raw["stats"][stat] = after
-        raw["last_daily_date"] = today
-        waifu_manager._state["users"][str(ctx.author.id)] = raw
+        # Serialize ONLY from waifu object (single source of truth)
+        data = waifu_manager._serialize_waifu(w)
+        data["last_daily_date"] = today
+
+        waifu_manager._state["users"][str(ctx.author.id)] = data
         waifu_manager._save()
 
         table = EmbedTable(
@@ -811,6 +812,7 @@ def main():
             embed.set_image(url=w.image_url)
 
         await ctx.send(embed=embed)
+
 
     @waifu.command()
     async def help(ctx):  # noqa
