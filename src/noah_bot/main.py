@@ -1,4 +1,5 @@
 import os
+import random
 import time
 import discord
 from discord.ext import commands
@@ -717,7 +718,7 @@ def main():
 
         table = EmbedTable(
             headers=["Advanced Combat Data"],
-            title=f"📊 {w.name} — Advanced Stats",
+            title=f"📊 {w.name} - Advanced Stats",
         )
 
         table.add_row(
@@ -749,6 +750,69 @@ def main():
         await ctx.send(embed=embed)
 
     @waifu.command()
+    async def daily(ctx):
+        """
+        .noah waifu daily
+        Gain +1 point in a random stat once per day.
+        """
+        w = waifu_manager.get_waifu(str(ctx.author.id))
+
+        if not w:
+            await ctx.send("❌ You don't have a waifu.")
+            return
+
+        now = time.time()
+        today = time.strftime("%Y-%m-%d", time.gmtime(now))
+
+        # Block if incapacitated or stunned
+        if not waifu_manager.devmode:
+            if w.incapacitated_until and w.incapacitated_until.timestamp() > now:
+                await ctx.send("🩸 Your waifu is incapacitated and cannot train today.")
+                return
+            if w.stunned_until and w.stunned_until.timestamp() > now:
+                await ctx.send("😵 Your waifu is stunned and cannot train today.")
+                return
+
+        # Read raw state to store daily usage
+        raw = waifu_manager._state["users"].get(str(ctx.author.id))
+        last_daily = raw.get("last_daily_date")
+
+        if last_daily == today and not waifu_manager.devmode:
+            await ctx.send("⏳ You already used your daily training today.")
+            return
+
+        # Random stat
+        stat = random.choice(["health", "agility", "mana", "recover", "damage"])
+        before = getattr(w.stats, stat)
+        after = min(30, before + 1)
+        setattr(w.stats, stat, after)
+
+        # Adjust HP if health increased
+        if stat == "health":
+            w.current_hp = min(w.current_hp, w.max_hp())
+
+        # Persist
+        raw["stats"][stat] = after
+        raw["last_daily_date"] = today
+        waifu_manager._state["users"][str(ctx.author.id)] = raw
+        waifu_manager._save()
+
+        table = EmbedTable(
+            headers=["Daily Training"],
+            title="🌅 Daily Training Complete",
+        )
+
+        table.add_row([f"📈 Stat upgraded: **{stat.capitalize()} +1**"])
+        table.add_row([f"🔢 New value: **{after} / 30**"])
+        table.add_row(["⏳ Available again: **Tomorrow**"])
+
+        embed = table.render()
+        if w.image_url:
+            embed.set_image(url=w.image_url)
+
+        await ctx.send(embed=embed)
+
+    @waifu.command()
     async def help(ctx):  # noqa
         chart = EmbedTable(headers=["Command"], title="Waifu Game Commands")
         chart.add_row([".noah waifu set <name> -special <special name>"])
@@ -758,6 +822,7 @@ def main():
         chart.add_row([".noah waifu sleep"])
         chart.add_row([".noah waifu levelup"])
         chart.add_row([".noah waifu stats"])
+        chart.add_row([".noah waifu daily"])
         chart.add_row([".noah waifu alive"])
         await ctx.send(embed=chart.render())
 
