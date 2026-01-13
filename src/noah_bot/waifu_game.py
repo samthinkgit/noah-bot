@@ -116,6 +116,10 @@ class Waifu:
         if self.incapacitated_until and now >= self.incapacitated_until:
             self.incapacitated_until = None
             self.heal_full()
+    
+    def is_stunned_now(self) -> bool:
+        now = _utc_now()
+        return self.is_stunned(now)
 
 
 class WaifuGameManager:
