@@ -139,6 +139,9 @@ class Waifu:
             return False
         return now < self.stunned_until
 
+    def is_stunned_now(self) -> bool:
+        return self.is_stunned(_utc_now())
+
 
 class WaifuGameManager:
     def __init__(self, json_path: str, rng: Optional[random.Random] = None) -> None:

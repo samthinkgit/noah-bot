@@ -714,7 +714,7 @@ def main():
         table.add_row(["Recover", w.stats.recover])
         table.add_row(["Damage", w.stats.hit_damage()])
         table.add_row(["Cooldown", f"{w.stats.cooldown_seconds() // 60} min"])
-        table.add_row(["Stunned", "Yes 😵" if w.is_stunned(None) else "No"])
+        table.add_row(["Stunned", "Yes 😵" if w.is_stunned_now() else "No"])
         table.add_row(["Special", w.special_name])
         table.add_row(["Pending Levelups", w.pending_levelups])
 
