@@ -721,9 +721,8 @@ def main():
             title=f"📊 {w.name} - Advanced Stats",
         )
 
-        table.add_row(
-            [f"🗡️ Damage per hit: **{w.stats.hit_damage()} HP**"]
-        )
+        table.add_row([f"🗡️ Damage level: **{w.stats.damage} / 30** ({w.stats.hit_damage()} pts per Hit)"])
+
         table.add_row(
             [f"💨 Dodge chance: **{int(w.stats.dodge_chance() * 100)}%**"]
         )
