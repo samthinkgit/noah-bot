@@ -704,6 +704,51 @@ def main():
         await ctx.send("✨ Your waifu has recovered and is active again!")
 
     @waifu.command()
+    async def stats(ctx):
+        """
+        .noah waifu stats
+        Shows advanced combat probabilities and derived values.
+        """
+        w = waifu_manager.get_waifu(str(ctx.author.id))
+
+        if not w:
+            await ctx.send("❌ You don't have a waifu.")
+            return
+
+        table = EmbedTable(
+            headers=["Advanced Combat Data"],
+            title=f"📊 {w.name} — Advanced Stats",
+        )
+
+        table.add_row(
+            [f"🗡️ Damage per hit: **{w.stats.hit_damage()} HP**"]
+        )
+        table.add_row(
+            [f"💨 Dodge chance: **{int(w.stats.dodge_chance() * 100)}%**"]
+        )
+        table.add_row(
+            [f"💥 Special trigger chance: **{int(w.stats.special_chance() * 100)}%**"]
+        )
+        table.add_row(
+            [f"⏳ Attack cooldown: **{w.stats.cooldown_seconds() // 60} minutes**"]
+        )
+        table.add_row(
+            ["😵 Stun duration on special: **3 hours**"]
+        )
+        table.add_row(
+            ["🩸 Incapacitation duration (HP = 0): **24 hours**"]
+        )
+        table.add_row(
+            [f"📈 Pending level-ups: **{w.pending_levelups}**"]
+        )
+
+        embed = table.render()
+        if w.image_url:
+            embed.set_image(url=w.image_url)
+
+        await ctx.send(embed=embed)
+
+    @waifu.command()
     async def help(ctx):  # noqa
         chart = EmbedTable(headers=["Command"], title="Waifu Game Commands")
         chart.add_row([".noah waifu set <name> -special <special name>"])
@@ -712,6 +757,7 @@ def main():
         chart.add_row([".noah waifu remaining"])
         chart.add_row([".noah waifu sleep"])
         chart.add_row([".noah waifu levelup"])
+        chart.add_row([".noah waifu stats"])
         chart.add_row([".noah waifu alive"])
         await ctx.send(embed=chart.render())
 
