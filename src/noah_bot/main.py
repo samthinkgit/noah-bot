@@ -476,12 +476,11 @@ def main():
             title=f"🖤 {w['name']} created",
         )
 
-        table.add_row(["**Health**: " + f"{w['hp']} / {w['max_hp']}"])
-        table.add_row(["**Agility**: " + str(stats["agility"])])
-        table.add_row(["**Mana**: " + str(stats["mana"])])
-        table.add_row(["**Recover**: " + str(stats["recover"])])
-        table.add_row(["**Damage**: " + f"{stats['hit_damage']}"])
-
+        table.add_row(["❤️ **Health**: " + f"{w['hp']} / {w['max_hp']}"])
+        table.add_row(["🤸‍♀️ **Agility**: " + str(stats["agility"])])
+        table.add_row(["🔮 **Mana**: " + str(stats["mana"])])
+        table.add_row(["💪 **Recover**: " + str(stats["recover"])])
+        table.add_row(["🗡️ **Damage**: " + f"{stats['hit_damage']}"])
         table.add_row(["**Dodge Chance**: " + f"{int(stats['dodge_chance'] * 100)}%"])
         table.add_row(
             ["**Special Chance**: " + f"{int(stats['special_chance'] * 100)}%"]
@@ -706,13 +705,12 @@ def main():
         )
 
         table.add_row(["**Alive**: " + ("Yes 🖤" if w.alive else "No ☠️")])
-        table.add_row(["**HP**: " + f"{w.current_hp} / {w.max_hp()}"])
-        table.add_row(["**Health**: " + str(w.stats.health)])
-        table.add_row(["**Agility**: " + str(w.stats.agility)])
-        table.add_row(["**Mana**: " + str(w.stats.mana)])
-        table.add_row(["**Recover**: " + str(w.stats.recover)])
-        table.add_row(["**Damage**: " + str(w.stats.hit_damage())])
-        table.add_row(["**Cooldown**: " + f"{w.stats.cooldown_seconds() // 60} min"])
+        table.add_row(["❤️ **HP**: " + f"{w.current_hp} / {w.max_hp()}"])
+        table.add_row(["🤸‍♀️ **Agility**: " + str(w.stats.agility)])
+        table.add_row(["🔮 **Mana**: " + str(w.stats.mana)])
+        table.add_row(["💪 **Recover**: " + str(w.stats.recover)])
+        table.add_row(["🗡️ **Damage**: " + str(w.stats.hit_damage())])
+        table.add_row(["⏳ **Cooldown**: " + f"{w.stats.cooldown_seconds() // 60} min"])
         table.add_row(["**Stunned**: " + ("Yes 😵" if w.is_stunned_now() else "No")])
         table.add_row(["**Special**: " + w.special_name])
         table.add_row(["**Pending Levelups**: " + str(w.pending_levelups)])
