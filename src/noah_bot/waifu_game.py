@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 
 SCHEMA_VERSION = 2
-INCAP_SECONDS = 24 * 60 * 60      # 24h incapacitated
+INCAP_SECONDS = 12 * 60 * 60      # 12h incapacitated
 STUN_SECONDS = 3 * 60 * 60        # 3h stun
 
 
