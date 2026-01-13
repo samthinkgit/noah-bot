@@ -518,7 +518,7 @@ def main():
                 table.add_row(["😵 Status: Stunned (3h)"])
 
             if result["killed"]:
-                table.add_row(["🩸 Status: Incapacitated (24h)"])
+                table.add_row(["🩸 Status: Incapacitated (12h)"])
                 table.add_row(["Reward: Full heal + Level Up"])
 
         w = waifu_manager.get_waifu(str(ctx.author.id))
@@ -735,7 +735,7 @@ def main():
             [f"⏳ Attack cooldown: **{w.stats.cooldown_seconds() // 60} minutes**"]
         )
         table.add_row(["😵 Stun duration on special: **3 hours**"])
-        table.add_row(["🩸 Incapacitation duration (HP = 0): **24 hours**"])
+        table.add_row(["🩸 Incapacitation duration (HP = 0): **12 hours**"])
         table.add_row([f"📈 Pending level-ups: **{w.pending_levelups}**"])
 
         embed = table.render()
