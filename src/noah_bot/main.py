@@ -721,26 +721,22 @@ def main():
             title=f"📊 {w.name} - Advanced Stats",
         )
 
-        table.add_row([f"🗡️ Damage level: **{w.stats.damage} / 30** ({w.stats.hit_damage()} pts per Hit)"])
-
         table.add_row(
-            [f"💨 Dodge chance: **{int(w.stats.dodge_chance() * 100)}%**"]
+            [
+                f"🗡️ Damage level: **{w.stats.damage} / 30** ({w.stats.hit_damage()} pts per Hit)"
+            ]
         )
+
+        table.add_row([f"💨 Dodge chance: **{int(w.stats.dodge_chance() * 100)}%**"])
         table.add_row(
             [f"💥 Special trigger chance: **{int(w.stats.special_chance() * 100)}%**"]
         )
         table.add_row(
             [f"⏳ Attack cooldown: **{w.stats.cooldown_seconds() // 60} minutes**"]
         )
-        table.add_row(
-            ["😵 Stun duration on special: **3 hours**"]
-        )
-        table.add_row(
-            ["🩸 Incapacitation duration (HP = 0): **24 hours**"]
-        )
-        table.add_row(
-            [f"📈 Pending level-ups: **{w.pending_levelups}**"]
-        )
+        table.add_row(["😵 Stun duration on special: **3 hours**"])
+        table.add_row(["🩸 Incapacitation duration (HP = 0): **24 hours**"])
+        table.add_row([f"📈 Pending level-ups: **{w.pending_levelups}**"])
 
         embed = table.render()
         if w.image_url:
@@ -762,15 +758,6 @@ def main():
 
         now = time.time()
         today = time.strftime("%Y-%m-%d", time.gmtime(now))
-
-        # Block if incapacitated or stunned
-        if not waifu_manager.devmode:
-            if w.incapacitated_until and w.incapacitated_until.timestamp() > now:
-                await ctx.send("🩸 Your waifu is incapacitated and cannot train today.")
-                return
-            if w.stunned_until and w.stunned_until.timestamp() > now:
-                await ctx.send("😵 Your waifu is stunned and cannot train today.")
-                return
 
         # Read last daily date safely
         raw = waifu_manager._state["users"].get(str(ctx.author.id), {})
@@ -811,7 +798,6 @@ def main():
             embed.set_image(url=w.image_url)
 
         await ctx.send(embed=embed)
-
 
     @waifu.command()
     async def help(ctx):  # noqa
