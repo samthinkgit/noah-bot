@@ -608,7 +608,7 @@ def main():
             title="⚔️ Waifu Battle",
         )
         table.description = f"`{str(ctx.author.display_name)}` attacked `{str(user.display_name)}`'s waifu"
-        if result["stunned_applied"]:
+        if result["special"]:
             table.description += f" using its special attack **{result['special_name']}** and stunned the opponent!"
 
         if result["dodged"]:
@@ -622,7 +622,7 @@ def main():
 
             table.add_row(["**Defender HP**: " + f"{result['defender_hp_after']}"])
 
-            if result["stunned_applied"]:
+            if result["special"]:
                 table.add_row(["**Stun**: " + "Yes 😵"])
 
             if result["killed"]:
