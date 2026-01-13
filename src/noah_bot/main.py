@@ -472,20 +472,22 @@ def main():
         stats = w["stats"]
 
         table = EmbedTable(
-            headers=["Stat", "Value"],
+            headers=["Stat"],
             title=f"🖤 {w['name']} created",
         )
 
-        table.add_row(["Health", f"{w['hp']} / {w['max_hp']}"])
-        table.add_row(["Agility", stats["agility"]])
-        table.add_row(["Mana", stats["mana"]])
-        table.add_row(["Recover", stats["recover"]])
-        table.add_row(["Damage", f"{stats['hit_damage']}"])
+        table.add_row(["**Health**: " + f"{w['hp']} / {w['max_hp']}"])
+        table.add_row(["**Agility**: " + str(stats["agility"])])
+        table.add_row(["**Mana**: " + str(stats["mana"])])
+        table.add_row(["**Recover**: " + str(stats["recover"])])
+        table.add_row(["**Damage**: " + f"{stats['hit_damage']}"])
 
-        table.add_row(["Dodge Chance", f"{int(stats['dodge_chance'] * 100)}%"])
-        table.add_row(["Special Chance", f"{int(stats['special_chance'] * 100)}%"])
-        table.add_row(["Cooldown", f"{stats['cooldown_seconds'] // 60} min"])
-        table.add_row(["Special Name", w["special_name"]])
+        table.add_row(["**Dodge Chance**: " + f"{int(stats['dodge_chance'] * 100)}%"])
+        table.add_row(
+            ["**Special Chance**: " + f"{int(stats['special_chance'] * 100)}%"]
+        )
+        table.add_row(["**Cooldown**: " + f"{stats['cooldown_seconds'] // 60} min"])
+        table.add_row(["**Special Name**: " + w["special_name"]])
 
         await ctx.send(embed=table.render())
 
@@ -543,36 +545,34 @@ def main():
             return
 
         table = EmbedTable(
-            headers=["Info", "Value"],
+            headers=["Info"],
             title="⏳ Attack Cooldown",
         )
 
         # Dev mode bypass
         if waifu_manager.devmode:
-            table.add_row(["Dev Mode", "ON 🛠️"])
-            table.add_row(["Status", "Ready to attack"])
-            table.add_row(["Remaining", "0 seconds"])
+            table.add_row(["**Dev Mode**: " + "ON 🛠️"])
+            table.add_row(["**Status**: " + "Ready to attack"])
+            table.add_row(["**Remaining**: " + "0 seconds"])
         else:
             if not w.last_attack_at:
-                table.add_row(["Status", "Ready to attack"])
-                table.add_row(["Remaining", "0 seconds"])
+                table.add_row(["**Status**: " + "Ready to attack"])
+                table.add_row(["**Remaining**: " + "0 seconds"])
             else:
                 cooldown = w.stats.cooldown_seconds()
                 elapsed = int((time.time() - w.last_attack_at.timestamp()))
                 remaining = max(0, cooldown - elapsed)
 
-                table.add_row(["Cooldown", f"{cooldown // 60} min"])
-                table.add_row(["Elapsed", f"{elapsed // 60} min {elapsed % 60} sec"])
-
+                table.add_row(["**Cooldown**: " + f"{cooldown // 60} min"])
                 if remaining == 0:
-                    table.add_row(["Status", "Ready to attack"])
-                    table.add_row(["Remaining", "0 seconds"])
+                    table.add_row(["**Status**: " + "Ready to attack"])
+                    table.add_row(["**Remaining**: " + "0 seconds"])
                 else:
-                    table.add_row(["Status", "Recovering ⏳"])
+                    table.add_row(["**Status**: " + "Recovering ⏳"])
                     table.add_row(
                         [
-                            "Remaining",
-                            f"{remaining // 60} min {remaining % 60} sec",
+                            "**Remaining**: "
+                            + f"{remaining // 60} min {remaining % 60} sec",
                         ]
                     )
 
@@ -598,29 +598,30 @@ def main():
             return
 
         table = EmbedTable(
-            headers=["Event", "Result"],
+            headers=["Event"],
             title="⚔️ Waifu Battle",
         )
-        table.description = (
-            f"**{str(ctx.author.display_name)}** attacked **{str(user.display_name)}**!"
-        )
+        table.description = f"`{str(ctx.author.display_name)}` attacked `{str(user.display_name)}`'s waifu"
+        if result["stunned_applied"]:
+            table.description += f" using its special attack **{result['special_name']}** and stunned the opponent!"
 
-        table.add_row(["Dodged", "Yes 💨" if result["dodged"] else "No"])
+        if result["dodged"]:
+            table.description += "\n 💨 The attack was dodged!"
 
         if not result["dodged"]:
-            table.add_row(["**Damage**", f"{result['damage']}"])
+            table.add_row(["**Damage**: " + f"{result['damage']}"])
 
             if result["special"]:
-                table.add_row(["Special", f"💥 {result['special_name']}"])
+                table.add_row(["**Special**: " + f"💥 {result['special_name']}"])
 
-            table.add_row(["**Defender HP**", result["defender_hp_after"]])
+            table.add_row(["**Defender HP**: " + f"{result['defender_hp_after']}"])
 
             if result["stunned_applied"]:
-                table.add_row(["Stun", "Yes 😵"])
+                table.add_row(["**Stun**: " + "Yes 😵"])
 
             if result["killed"]:
-                table.add_row(["Death", "☠️ Permanent"])
-                table.add_row(["Reward", "Full heal + Level Up"])
+                table.add_row(["**Death**: " + "☠️ Permanent"])
+                table.add_row(["**Reward**: Full heal + Level Up"])
 
         w = waifu_manager.get_waifu(str(ctx.author.id))
         if w.image_url:
@@ -643,14 +644,13 @@ def main():
             return
 
         table = EmbedTable(
-            headers=["Info", "Value"],
+            headers=["Info"],
             title="😴 Waifu Rest",
         )
 
-        table.add_row(["HP Before", result["hp_before"]])
-        table.add_row(["HP After", result["hp_after"]])
-        table.add_row(["Max HP", result["max_hp"]])
-        table.add_row(["Recovered", result["healed"]])
+        table.add_row(["HP Before: " + f"{result['hp_before']}"])
+        table.add_row(["HP After: " + f"{result['hp_after']}"])
+        table.add_row(["Recovered: " + f"{result['healed']}"])
 
         w = waifu_manager.get_waifu(str(ctx.author.id))
         if w.image_url:
@@ -673,14 +673,13 @@ def main():
             return
 
         table = EmbedTable(
-            headers=["Field", "Value"],
+            headers=["Info"],
             title="⬆️ Level Up!",
         )
-        table.add_row(["Upgraded Stat", result["chosen_stat"]])
-        table.add_row(["Pending Levelups", result["pending_levelups_left"]])
-        table.add_row(
-            ["Max HP", f"{result['max_hp_before']} → {result['max_hp_after']}"]
-        )
+
+        table.add_row(["Upgraded Stat: " + str(result["chosen_stat"] + " +2pts")])
+        table.add_row(["Pending Levelups: " + str(result["pending_levelups_left"])])
+
         w = waifu_manager.get_waifu(str(ctx.author.id))
         if w.image_url:
             embed = table.render()
@@ -702,21 +701,21 @@ def main():
             return
 
         table = EmbedTable(
-            headers=["Stat", "Value"],
+            headers=["Stat"],
             title=f"📊 {w.name} Status",
         )
 
-        table.add_row(["Alive", "Yes 🖤" if w.alive else "No ☠️"])
-        table.add_row(["HP", f"{w.current_hp} / {w.max_hp()}"])
-        table.add_row(["Health", w.stats.health])
-        table.add_row(["Agility", w.stats.agility])
-        table.add_row(["Mana", w.stats.mana])
-        table.add_row(["Recover", w.stats.recover])
-        table.add_row(["Damage", w.stats.hit_damage()])
-        table.add_row(["Cooldown", f"{w.stats.cooldown_seconds() // 60} min"])
-        table.add_row(["Stunned", "Yes 😵" if w.is_stunned_now() else "No"])
-        table.add_row(["Special", w.special_name])
-        table.add_row(["Pending Levelups", w.pending_levelups])
+        table.add_row(["**Alive**: " + ("Yes 🖤" if w.alive else "No ☠️")])
+        table.add_row(["**HP**: " + f"{w.current_hp} / {w.max_hp()}"])
+        table.add_row(["**Health**: " + str(w.stats.health)])
+        table.add_row(["**Agility**: " + str(w.stats.agility)])
+        table.add_row(["**Mana**: " + str(w.stats.mana)])
+        table.add_row(["**Recover**: " + str(w.stats.recover)])
+        table.add_row(["**Damage**: " + str(w.stats.hit_damage())])
+        table.add_row(["**Cooldown**: " + f"{w.stats.cooldown_seconds() // 60} min"])
+        table.add_row(["**Stunned**: " + ("Yes 😵" if w.is_stunned_now() else "No")])
+        table.add_row(["**Special**: " + w.special_name])
+        table.add_row(["**Pending Levelups**: " + str(w.pending_levelups)])
 
         w = waifu_manager.get_waifu(str(ctx.author.id))
         if w.image_url:
@@ -744,7 +743,9 @@ def main():
         chart.add_row(
             [".noah waifu levelup: Use a pending level up to upgrade a stat."]
         )
-        chart.add_row([".noah waifu remaining: Show remaining cooldown before next attack."])
+        chart.add_row(
+            [".noah waifu remaining: Show remaining cooldown before next attack."]
+        )
         chart.add_row(
             [".noah waifu setimage: Set your waifu's image from a replied embed."]
         )
