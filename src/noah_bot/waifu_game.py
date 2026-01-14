@@ -190,6 +190,7 @@ class WaifuGameManager:
 
         # Dodge
         if self.rng.random() < d.stats.dodge_chance():
+            a.last_attack_at = now if not self.devmode else a.last_attack_at
             return {
                 "ok": True,
                 "dodged": True,
