@@ -106,7 +106,13 @@ class Waifu:
             self.heal_full()
 
     def level(self) -> int:
-        return self.stats.health + self.stats.agility + self.stats.mana + self.stats.recover + self.stats.damage
+        return (
+            self.stats.health
+            + self.stats.agility
+            + self.stats.mana
+            + self.stats.recover
+            + self.stats.damage
+        )
 
 
 # ---------------- MANAGER ---------------- #
@@ -198,9 +204,33 @@ class WaifuGameManager:
             if d.is_incapacitated(now):
                 return {"ok": False, "message": "Target waifu is incapacitated."}
 
+        def _add_pending_levelups(target_user_id: str, amount: int) -> None:
+            """
+            Adds pending levelups without being overwritten later by stale objects.
+            If the target is the current attacker, mutate `a` directly.
+            """
+            nonlocal a
+            if str(target_user_id) == str(attacker_id):
+                a.pending_levelups += amount
+                return
+
+            w = self.get_waifu(str(target_user_id))
+            if not w:
+                return
+            w.pending_levelups += amount
+            self._state["users"][str(target_user_id)] = self._serialize_waifu(w)
+
         # Dodge
         if self.rng.random() < d.stats.dodge_chance():
-            a.last_attack_at = now if not self.devmode else a.last_attack_at
+            # In normal mode, dodges should still consume cooldown
+            if not self.devmode:
+                a.last_attack_at = now
+
+            # Persist state if we changed attacker cooldown
+            self._state["users"][str(attacker_id)] = self._serialize_waifu(a)
+            self._state["users"][str(defender_id)] = self._serialize_waifu(d)
+            self._save()
+
             return {
                 "ok": True,
                 "dodged": True,
@@ -208,6 +238,7 @@ class WaifuGameManager:
                 "damage": 0,
                 "defender_hp_after": d.current_hp,
                 "killed": False,
+                "stunned_applied": False,
             }
 
         special = self.rng.random() < a.stats.special_chance()
@@ -224,29 +255,32 @@ class WaifuGameManager:
             stunned_applied = True
 
         killed = False
+        defender_hp_after = d.current_hp
+
         if d.current_hp <= 0:
+            killed = True
+
+            # Rank attackers by total damage dealt since last death
+            ranking = sorted(d.received_hits.items(), key=lambda x: x[1], reverse=True)
+
+            if len(ranking) >= 1:
+                top1_id, _ = ranking[0]
+                _add_pending_levelups(top1_id, 2)
+
+            if len(ranking) >= 2:
+                top2_id, _ = ranking[1]
+                _add_pending_levelups(top2_id, 1)
+
+            # Reset defender state
+            d.received_hits = {}
             d.heal_full()
             d.incapacitated_until = now + timedelta(seconds=INCAP_SECONDS)
-            killed = True
-            ranking = sorted(d.received_hits.items(), key=lambda x: x[1], reverse=True)
-            if ranking:
-                # 1º → +2 levelups
-                top1_id, _ = ranking[0]
-                w1 = self.get_waifu(top1_id)
-                if w1:
-                    w1.pending_levelups += 2
-                    self._state["users"][top1_id] = self._serialize_waifu(w1)
 
-            if len(ranking) > 1:
-                # 2º → +1 levelup
-                top2_id, _ = ranking[1]
-                w2 = self.get_waifu(top2_id)
-                if w2:
-                    w2.pending_levelups += 1
-                    self._state["users"][top2_id] = self._serialize_waifu(w2)
-
-            d.received_hits = {}
+            # Reward attacker with full heal (your original rule)
             a.heal_full()
+
+            # What do we report as hp_after? (keep it consistent for UI)
+            defender_hp_after = 0  # shows the kill correctly
 
         if not self.devmode:
             a.last_attack_at = now
@@ -261,7 +295,7 @@ class WaifuGameManager:
             "special": special,
             "special_name": a.special_name if special else None,
             "damage": damage,
-            "defender_hp_after": d.current_hp,
+            "defender_hp_after": defender_hp_after,
             "stunned_applied": stunned_applied,
             "killed": killed,
         }

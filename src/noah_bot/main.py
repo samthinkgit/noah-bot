@@ -1010,7 +1010,7 @@ def main():
         Sends a message with 3 example images using embeds.
         """
         image_urls = [
-            "https://i.blogs.es/8dee66/anime/500_333.jpeg"
+            "https://i.blogs.es/8dee66/anime/500_333.jpeg",
             "https://placebear.com/400/300",
             "https://picsum.photos/400/300",
         ]
