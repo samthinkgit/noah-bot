@@ -734,6 +734,7 @@ def main():
         table.add_row(["😵 Stun duration on special: **3 hours**"])
         table.add_row(["🩸 Incapacitation duration (HP = 0): **12 hours**"])
         table.add_row([f"📈 Pending level-ups: **{w.pending_levelups}**"])
+        table.add_row([f"🛌 Latest Sleep: **{w.last_sleep_date}**"])
 
         embed = table.render()
         if w.image_url:
