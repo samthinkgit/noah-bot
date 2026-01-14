@@ -88,6 +88,9 @@ class Waifu:
     def heal_full(self) -> None:
         self.current_hp = self.max_hp()
 
+    def heal_half(self) -> None:
+        self.current_hp = _clamp(self.current_hp + self.max_hp() // 2, 0, self.max_hp())
+
     def heal(self, amount: int) -> None:
         self.current_hp = _clamp(self.current_hp + amount, 0, self.max_hp())
 
@@ -273,7 +276,7 @@ class WaifuGameManager:
 
             # Reset defender state
             d.received_hits = {}
-            d.heal_full()
+            d.heal_half()
             d.incapacitated_until = now + timedelta(seconds=INCAP_SECONDS)
 
             # Reward attacker with full heal (your original rule)
