@@ -809,6 +809,7 @@ def main():
         chart.add_row([".noah waifu stats"])
         chart.add_row([".noah waifu daily"])
         chart.add_row([".noah waifu alive"])
+        chart.add_row([".noah waifu attackedby"])
         await ctx.send(embed=chart.render())
 
     # ---------------- DEBUG HISTORY ---------------- #
