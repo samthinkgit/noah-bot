@@ -525,7 +525,7 @@ def main():
 
         await ctx.send(embed=embed)
 
-    @waifu.command()
+    @waifu.command(aliases=["rem"])
     async def remaining(ctx, *, args: str = ""):
         """
         .noah waifu remaining
@@ -854,7 +854,7 @@ def main():
         chart.add_row([".noah waifu set <name> -special <special name>"])
         chart.add_row([".noah waifu attack @user"])
         chart.add_row([".noah waifu status -user @user"])
-        chart.add_row([".noah waifu remaining"])
+        chart.add_row([".noah waifu remaining -user @user"])
         chart.add_row([".noah waifu sleep"])
         chart.add_row([".noah waifu levelup"])
         chart.add_row([".noah waifu stats -user @user"])
