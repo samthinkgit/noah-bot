@@ -795,6 +795,43 @@ def main():
         await ctx.send(embed=embed)
 
     @waifu.command()
+    async def setimage(ctx):
+        """
+        .noah waifu setimage
+        Must reply to a message containing an embed image.
+        """
+        if not ctx.message.reference:
+            await ctx.send("❌ You must reply to a message with an embed image.")
+            return
+
+        replied = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+
+        image_url = None
+
+        for embed in replied.embeds:
+            if embed.image and embed.image.url:
+                image_url = embed.image.url
+                break
+            if embed.thumbnail and embed.thumbnail.url:
+                image_url = embed.thumbnail.url
+                break
+
+        if not image_url:
+            await ctx.send("❌ No image found in the replied embed.")
+            return
+
+        result = waifu_manager.waifu_set_image(
+            str(ctx.author.id),
+            image_url,
+        )
+
+        if not result["ok"]:
+            await ctx.send(f"❌ {result['message']}")
+            return
+
+        await ctx.send("🖼️ Waifu image set successfully!")
+
+    @waifu.command()
     async def daily(ctx):
         """
         .noah waifu daily
