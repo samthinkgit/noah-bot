@@ -627,17 +627,38 @@ def main():
         await ctx.send(embed=embed)
 
     @waifu.command()
-    async def status(ctx):
+    async def status(ctx, *, args: str = ""):
         """
         .noah waifu status
+        .noah waifu status -user @user
         """
-        w = waifu_manager.get_waifu(str(ctx.author.id))
+
+        target_user = ctx.author
+
+        # Parse optional -user flag
+        if "-user" in args:
+            parts = args.split("-user", 1)
+            mention = parts[1].strip()
+
+            if not ctx.message.mentions:
+                await ctx.send("❌ Please mention a valid user after `-user`.")
+                return
+
+            target_user = ctx.message.mentions[0]
+
+        w = waifu_manager.get_waifu(str(target_user.id))
         if not w:
-            await ctx.send("❌ You don't have a waifu.")
+            if target_user == ctx.author:
+                await ctx.send("❌ You don't have a waifu.")
+            else:
+                await ctx.send(f"❌ {target_user.display_name} doesn't have a waifu.")
             return
 
         now = time.time()
-        table = EmbedTable(headers=["Stat"], title=f"📊 {w.name} Status")
+        table = EmbedTable(
+            headers=["Stat"],
+            title=f"📊 {w.name} Status ({target_user.display_name})"
+        )
 
         if w.stunned_until and w.stunned_until.timestamp() > now:
             remaining = int(w.stunned_until.timestamp() - now)
@@ -654,7 +675,6 @@ def main():
         else:
             table.add_row(["Status: Active\n"])
 
-        table.add_row([f"**Level**: {w.level()}/100\n"])
         table.add_row([f"❤️ HP: {w.current_hp} / {w.max_hp()}"])
         table.add_row([f"🤸‍♀️ Agility: {w.stats.agility}"])
         table.add_row([f"🔮 Mana: {w.stats.mana}"])
@@ -669,6 +689,8 @@ def main():
             embed.set_image(url=w.image_url)
 
         await ctx.send(embed=embed)
+
+
 
     @waifu.command()
     async def alive(ctx):
