@@ -654,7 +654,7 @@ def main():
         else:
             table.add_row(["Status: Active\n"])
 
-        table.add_row([f"**Level**: {w.level()}\n"])
+        table.add_row([f"**Level**: {w.level()}/100\n"])
         table.add_row([f"❤️ HP: {w.current_hp} / {w.max_hp()}"])
         table.add_row([f"🤸‍♀️ Agility: {w.stats.agility}"])
         table.add_row([f"🔮 Mana: {w.stats.mana}"])
