@@ -181,6 +181,8 @@ class DiscordImageRenderer:
         image_size=(300, 300),
         title_height=50,
     ):
+
+        self.font_path_bold = "arialbd.ttf"
         self.background_color = background_color
         self.padding = padding
         self.image_size = image_size
@@ -237,6 +239,25 @@ class DiscordImageRenderer:
             font=font,
             fill=fill,
         )
+
+    def _fit_font_to_width(self, draw, text, font_path, max_width, start_size):
+        size = start_size
+
+        while size > 12:
+            try:
+                font = ImageFont.truetype(font_path, size)
+            except Exception:
+                font = ImageFont.load_default()
+
+            bbox = draw.textbbox((0, 0), text, font=font)
+            width = bbox[2] - bbox[0]
+
+            if width <= max_width:
+                return font
+
+            size -= 2
+
+        return font
 
     def render(self, images: list[dict]) -> Image.Image:
         count = len(images)
@@ -295,16 +316,28 @@ class DiscordImageRenderer:
                         # Main emoji
                         canvas.paste(emoji_img, (fx, fy), emoji_img)
 
-
                     except Exception:
                         pass
 
             if meta.get("local_id"):
                 local_id = meta["local_id"]
-                bbox = draw.textbbox((0, 0), local_id, font=self.font_big)
-                lx = img_x + (img.width - (bbox[2] - bbox[0])) // 2
+                max_width = img.width - 20
+
+                font = self._fit_font_to_width(
+                    draw=draw,
+                    text=local_id,
+                    font_path=self.font_path_bold,
+                    max_width=max_width,
+                    start_size=48,
+                )
+
+                bbox = draw.textbbox((0, 0), local_id, font=font)
+                text_w = bbox[2] - bbox[0]
+
+                lx = img_x + (img.width - text_w) // 2
                 ly = img_y + img.height - 70
-                self._draw_text_shadow(draw, (lx, ly), local_id, self.font_big, "white")
+
+                self._draw_text_shadow(draw, (lx, ly), local_id, font, "white")
 
             banner_y = img_y + self.image_size[1]
             draw.rectangle(
@@ -348,15 +381,17 @@ def _parse_embed_metadata(embed):
         "rarity": None,
     }
 
+    rarities = ["Delta", "Beta", "Gamma", "Alpha", "Omega", "Sigma", "Epsilon", "Zeta"]
     if embed.description:
         for line in embed.description.splitlines():
             if line.startswith("Favorite:"):
                 meta["favorite"] = line.replace("Favorite:", "").strip()
             elif line.startswith("Local ID:"):
                 meta["local_id"] = line.replace("Local ID:", "").strip()
-            elif "Beta" in line or "Gamma" in line:
+
+            elif any(rarity in line for rarity in rarities):
                 # Extrae símbolo entre paréntesis
                 if "(" in line and ")" in line:
-                    meta["rarity"] = line[line.find("(") + 1 : line.find(")")]
+                    meta["rarity"] = line[line.find("(") + 1 : line.find(")")] # noqa
 
     return meta

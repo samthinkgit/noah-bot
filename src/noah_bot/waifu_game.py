@@ -210,7 +210,7 @@ class WaifuGameManager:
 
         killed = False
         if d.current_hp <= 0:
-            d.current_hp = 0
+            d.heal_full()
             d.incapacitated_until = now + timedelta(seconds=INCAP_SECONDS)
             killed = True
 
