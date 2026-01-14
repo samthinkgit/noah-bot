@@ -616,7 +616,7 @@ def main():
             return
 
         table = EmbedTable(headers=["Info"], title="⬆️ Level Up!")
-        table.add_row([f"Upgraded stat: {result['chosen_stat']} +2"])
+        table.add_row([f"Upgraded stat: {result['chosen_stat']} +1pt"])
         table.add_row([f"Pending Levelups: {result['pending_levelups_left']}"])
 
         w = waifu_manager.get_waifu(str(ctx.author.id))
@@ -654,6 +654,7 @@ def main():
         else:
             table.add_row(["Status: Active\n"])
 
+        table.add_row([f"**Level**: {w.level()}\n"])
         table.add_row([f"❤️ HP: {w.current_hp} / {w.max_hp()}"])
         table.add_row([f"🤸‍♀️ Agility: {w.stats.agility}"])
         table.add_row([f"🔮 Mana: {w.stats.mana}"])

@@ -105,6 +105,9 @@ class Waifu:
             self.incapacitated_until = None
             self.heal_full()
 
+    def level(self) -> int:
+        return self.stats.health + self.stats.agility + self.stats.mana + self.stats.recover + self.stats.damage
+
 
 # ---------------- MANAGER ---------------- #
 
@@ -308,7 +311,7 @@ class WaifuGameManager:
             return {"ok": False, "message": "No pending levelups."}
 
         stat = self.rng.choice(list(vars(w.stats).keys()))
-        setattr(w.stats, stat, _clamp(getattr(w.stats, stat) + 2, 0, 30))
+        setattr(w.stats, stat, _clamp(getattr(w.stats, stat) + 1, 0, 30))
         w.pending_levelups -= 1
 
         self._state["users"][str(user_id)] = self._serialize_waifu(w)
