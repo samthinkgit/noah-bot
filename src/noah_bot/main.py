@@ -900,6 +900,39 @@ def main():
         else:
             await ctx.send(f"🧹 Cleared `{count}` waifus from your steal list.")
 
+    @waifu.command()
+    async def attackedby(ctx):
+        """
+        .noah waifu attackedby
+        Shows who attacked you and total damage received since last death.
+        """
+        w = waifu_manager.get_waifu(str(ctx.author.id))
+
+        if not w:
+            await ctx.send("❌ You don't have a waifu.")
+            return
+
+        if not w.received_hits:
+            await ctx.send("🛡️ No attacks received since last death.")
+            return
+
+        table = EmbedTable(
+            headers=["Attacker", "Total Damage"], title="🩸 Damage Received"
+        )
+
+        for attacker_id, dmg in sorted(
+            w.received_hits.items(), key=lambda x: x[1], reverse=True
+        ):
+            user = ctx.guild.get_member(int(attacker_id))
+            name = user.display_name if user else attacker_id
+            table.add_row([name, f"{dmg} HP"])
+
+        embed = table.render()
+        if w.image_url:
+            embed.set_image(url=w.image_url)
+
+        await ctx.send(embed=embed)
+
     @bot.command()
     async def test_image(ctx):
         """

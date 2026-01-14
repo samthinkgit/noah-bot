@@ -7,8 +7,8 @@ from typing import Any, Dict, Optional
 
 
 SCHEMA_VERSION = 2
-INCAP_SECONDS = 12 * 60 * 60      # 12h incapacitated
-STUN_SECONDS = 3 * 60 * 60        # 3h stun
+INCAP_SECONDS = 12 * 60 * 60  # 12h incapacitated
+STUN_SECONDS = 3 * 60 * 60  # 3h stun
 
 
 def _utc_now() -> datetime:
@@ -28,6 +28,7 @@ def _clamp(n: int, lo: int, hi: int) -> int:
 
 
 # ---------------- STATS ---------------- #
+
 
 @dataclass
 class Stats:
@@ -64,6 +65,7 @@ class Stats:
 
 # ---------------- WAIFU ---------------- #
 
+
 @dataclass
 class Waifu:
     name: str
@@ -75,6 +77,7 @@ class Waifu:
     last_attack_at: Optional[datetime]
     stunned_until: Optional[datetime]
     incapacitated_until: Optional[datetime]
+    received_hits: Dict[str, int]
 
     last_sleep_date: Optional[str]
     pending_levelups: int
@@ -104,6 +107,7 @@ class Waifu:
 
 
 # ---------------- MANAGER ---------------- #
+
 
 class WaifuGameManager:
     def __init__(self, json_path: str, rng: Optional[random.Random] = None) -> None:
@@ -148,7 +152,9 @@ class WaifuGameManager:
 
     # ---------- Core Actions ---------- #
 
-    def waifu_set(self, user_id: str, waifu_name: str, special_name: str, image_url=None):
+    def waifu_set(
+        self, user_id: str, waifu_name: str, special_name: str, image_url=None
+    ):
         stats = Stats(*(self.rng.randint(5, 10) for _ in range(5)))
         stats.cap_all()
 
@@ -163,6 +169,7 @@ class WaifuGameManager:
             incapacitated_until=None,
             last_sleep_date=None,
             pending_levelups=0,
+            received_hits={},
         )
 
         self._state["users"][str(user_id)] = self._serialize_waifu(w)
@@ -204,6 +211,10 @@ class WaifuGameManager:
         damage = a.stats.hit_damage()
         d.current_hp -= damage
 
+        d.received_hits[str(attacker_id)] = (
+            d.received_hits.get(str(attacker_id), 0) + damage
+        )
+
         stunned_applied = False
         if special and not self.devmode:
             d.stunned_until = now + timedelta(seconds=STUN_SECONDS)
@@ -214,9 +225,25 @@ class WaifuGameManager:
             d.heal_full()
             d.incapacitated_until = now + timedelta(seconds=INCAP_SECONDS)
             killed = True
+            ranking = sorted(d.received_hits.items(), key=lambda x: x[1], reverse=True)
+            if ranking:
+                # 1º → +2 levelups
+                top1_id, _ = ranking[0]
+                w1 = self.get_waifu(top1_id)
+                if w1:
+                    w1.pending_levelups += 2
+                    self._state["users"][top1_id] = self._serialize_waifu(w1)
 
+            if len(ranking) > 1:
+                # 2º → +1 levelup
+                top2_id, _ = ranking[1]
+                w2 = self.get_waifu(top2_id)
+                if w2:
+                    w2.pending_levelups += 1
+                    self._state["users"][top2_id] = self._serialize_waifu(w2)
+
+            d.received_hits = {}
             a.heal_full()
-            a.pending_levelups += 1
 
         if not self.devmode:
             a.last_attack_at = now
@@ -307,6 +334,7 @@ class WaifuGameManager:
             "incapacitated_until": _to_iso(w.incapacitated_until),
             "last_sleep_date": w.last_sleep_date,
             "pending_levelups": w.pending_levelups,
+            "received_hits": w.received_hits,
         }
 
     def _deserialize_waifu(self, raw: Dict[str, Any]) -> Waifu:
@@ -324,6 +352,7 @@ class WaifuGameManager:
             incapacitated_until=_from_iso(raw.get("incapacitated_until")),
             last_sleep_date=raw.get("last_sleep_date"),
             pending_levelups=raw.get("pending_levelups", 0),
+            received_hits=raw.get("received_hits", {}),
         )
 
         w.current_hp = _clamp(w.current_hp, 0, w.max_hp())
