@@ -2,6 +2,7 @@ import os
 import random
 import time
 import discord
+from rich import inspect
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -9,6 +10,7 @@ from dotenv import load_dotenv
 from io import BytesIO
 from noah_bot.ai import AiResponder
 from noah_bot.discord_formatter import (
+    _parse_embed_metadata,
     DiscordChart,
     UserEmojiManager,
     EmbedTable,
@@ -408,19 +410,14 @@ def main():
         images = []
 
         for i, embed in enumerate(replied_msg.embeds, start=1):
+            meta = _parse_embed_metadata(embed)
+
             if embed.image and embed.image.url:
                 images.append(
                     {
                         "title": embed.title or f"Image {i}",
                         "url": embed.image.url,
-                    }
-                )
-
-            if embed.thumbnail and embed.thumbnail.url:
-                images.append(
-                    {
-                        "title": (embed.title or f"Image {i}") + " (thumb)",
-                        "url": embed.thumbnail.url,
+                        "meta": meta,
                     }
                 )
 
@@ -922,6 +919,23 @@ def main():
 
         for embed in embeds:
             await ctx.send(embed=embed)
+
+    @bot.command()
+    async def get_embed(ctx):
+        if not ctx.message.reference:
+            await ctx.send("❌ You must reply to a message containing embeds.")
+            return
+
+        try:
+            replied_msg = await ctx.channel.fetch_message(
+                ctx.message.reference.message_id
+            )
+        except discord.NotFound:
+            await ctx.send("❌ Original message not found.")
+            return
+
+        for i, embed in enumerate(replied_msg.embeds, start=1):
+            inspect(embed)
 
     # ---------------- RUN ---------------- #
 

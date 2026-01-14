@@ -179,7 +179,7 @@ class DiscordImageRenderer:
         background_color=(255, 255, 255),
         padding=40,
         image_size=(300, 300),
-        title_height=40,
+        title_height=50,
     ):
         self.background_color = background_color
         self.padding = padding
@@ -188,34 +188,76 @@ class DiscordImageRenderer:
 
         try:
             self.font = ImageFont.truetype("arial.ttf", 20)
+            self.font_bold = ImageFont.truetype("arialbd.ttf", 22)
+            self.font_big = ImageFont.truetype("arialbd.ttf", 48)
         except Exception:
             self.font = ImageFont.load_default()
+            self.font_bold = self.font
+            self.font_big = self.font
 
     def _download_image(self, url: str) -> Image.Image:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
-        img = Image.open(BytesIO(response.content)).convert("RGB")
-        return img
+        return Image.open(BytesIO(response.content)).convert("RGBA")
+
+    def _draw_text_shadow(
+        self,
+        draw,
+        pos,
+        text,
+        font,
+        fill,
+    ):
+        x, y = pos
+
+        # Shadow layers (halo effect)
+        shadow_offsets = [
+            (-3, -3),
+            (-3, 0),
+            (-3, 3),
+            (0, -3),
+            (0, 3),
+            (3, -3),
+            (3, 0),
+            (3, 3),
+        ]
+
+        for ox, oy in shadow_offsets:
+            draw.text(
+                (x + ox, y + oy),
+                text,
+                font=font,
+                fill=(0, 0, 0, 200),  # strong dark shadow
+            )
+
+        # Main text
+        draw.text(
+            (x, y),
+            text,
+            font=font,
+            fill=fill,
+        )
 
     def render(self, images: list[dict]) -> Image.Image:
         count = len(images)
         if count == 0:
             return Image.new("RGBA", (1, 1), (0, 0, 0, 0))
 
-        cols = count
-        rows = 1
+        MAX_COLS = 5
+        cols = min(count, MAX_COLS)
+        rows = (count + MAX_COLS - 1) // MAX_COLS
 
-        # Calculamos el ancho y alto total
         canvas_width = cols * self.image_size[0] + (cols + 1) * self.padding
         canvas_height = (
             rows * (self.image_size[1] + self.title_height) + (rows + 1) * self.padding
         )
 
-        # 1. Fondo transparente usando "RGBA" y color (0,0,0,0)
         canvas = Image.new("RGBA", (canvas_width, canvas_height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(canvas)
 
         for idx, data in enumerate(images):
+            meta = data.get("meta", {})
+
             col = idx % cols
             row = idx // cols
 
@@ -224,44 +266,97 @@ class DiscordImageRenderer:
                 self.image_size[1] + self.title_height + self.padding
             )
 
-            # Descarga y redimensionado
-            img = self._download_image(data["url"]).convert("RGBA")
+            img = self._download_image(data["url"])
             img.thumbnail(self.image_size)
 
-            # Centrar imagen en su celda
             img_x = x + (self.image_size[0] - img.width) // 2
             img_y = y
 
-            # 2. Dibujar el banner blanco detrás del texto
-            # El banner ocupará todo el ancho de la celda debajo de la imagen
-            banner_rect = [
-                x,
-                img_y + self.image_size[1],
-                x + self.image_size[0],
-                img_y + self.image_size[1] + self.title_height,
-            ]
-            draw.rectangle(banner_rect, fill="white")
-
-            # Pegar la imagen (usamos la propia imagen como máscara para mantener su transparencia)
             canvas.paste(img, (img_x, img_y), img)
 
-            # Configurar y dibujar el texto
-            title = data.get("title", "")
-            bbox = draw.textbbox((0, 0), title, font=self.font)
-            text_width = bbox[2] - bbox[0]
-            text_height = bbox[3] - bbox[1]
+            if meta.get("favorite"):
+                emoji = meta["favorite"]
+                emoji_url = self._emoji_to_twemoji_url(emoji)
 
-            # Centrar texto en el banner
-            text_x = x + (self.image_size[0] - text_width) // 2
-            text_y = (
-                banner_rect[1] + (self.title_height - text_height) // 2 - 2
-            )  # Ajuste fino vertical
+                if emoji_url:
+                    try:
+                        emoji_img = self._download_image(emoji_url)
+                        emoji_img = emoji_img.resize((48, 48), Image.LANCZOS)
 
-            draw.text(
-                (text_x, text_y),
-                title,
-                fill="black",  # Fuente negra pura
-                font=self.font,
+                        fx = img_x + img.width - emoji_img.width - 6
+                        fy = img_y + 6
+
+                        # Clean dark shadow (no glow, no halo)
+                        shadow = emoji_img.copy().convert("RGBA")
+                        shadow = shadow.point(lambda p: p * 0.6)  # darken
+
+                        canvas.paste(shadow, (fx + 3, fy + 3), shadow)
+
+                        # Main emoji
+                        canvas.paste(emoji_img, (fx, fy), emoji_img)
+
+
+                    except Exception:
+                        pass
+
+            if meta.get("local_id"):
+                local_id = meta["local_id"]
+                bbox = draw.textbbox((0, 0), local_id, font=self.font_big)
+                lx = img_x + (img.width - (bbox[2] - bbox[0])) // 2
+                ly = img_y + img.height - 70
+                self._draw_text_shadow(draw, (lx, ly), local_id, self.font_big, "white")
+
+            banner_y = img_y + self.image_size[1]
+            draw.rectangle(
+                [
+                    x,
+                    banner_y,
+                    x + self.image_size[0],
+                    banner_y + self.title_height,
+                ],
+                fill="white",
             )
 
+            title = data.get("title", "")
+            rarity = meta.get("rarity")
+
+            if rarity:
+                title = f"{title}  {rarity}"
+
+            bbox = draw.textbbox((0, 0), title, font=self.font_bold)
+            tx = x + (self.image_size[0] - (bbox[2] - bbox[0])) // 2
+            ty = banner_y + (self.title_height - (bbox[3] - bbox[1])) // 2
+
+            draw.text((tx, ty), title, font=self.font_bold, fill="black")
+
         return canvas
+
+    def _emoji_to_twemoji_url(self, emoji: str) -> str | None:
+        try:
+            codepoints = "-".join(f"{ord(c):x}" for c in emoji)
+            return f"https://twemoji.maxcdn.com/v/latest/72x72/{codepoints}.png"
+        except Exception:
+            return None
+
+
+# Helper function to parse embed metadata from
+# `.v <waifu id>` from waifugami
+def _parse_embed_metadata(embed):
+    meta = {
+        "favorite": None,
+        "local_id": None,
+        "rarity": None,
+    }
+
+    if embed.description:
+        for line in embed.description.splitlines():
+            if line.startswith("Favorite:"):
+                meta["favorite"] = line.replace("Favorite:", "").strip()
+            elif line.startswith("Local ID:"):
+                meta["local_id"] = line.replace("Local ID:", "").strip()
+            elif "Beta" in line or "Gamma" in line:
+                # Extrae símbolo entre paréntesis
+                if "(" in line and ")" in line:
+                    meta["rarity"] = line[line.find("(") + 1 : line.find(")")]
+
+    return meta
