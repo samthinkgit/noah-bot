@@ -638,7 +638,7 @@ def main():
         # Parse optional -user flag
         if "-user" in args:
             parts = args.split("-user", 1)
-            mention = parts[1].strip()
+            _ = parts  # for readability
 
             if not ctx.message.mentions:
                 await ctx.send("❌ Please mention a valid user after `-user`.")
@@ -656,8 +656,7 @@ def main():
 
         now = time.time()
         table = EmbedTable(
-            headers=["Stat"],
-            title=f"📊 {w.name} Status ({target_user.display_name})"
+            headers=["Stat"], title=f"📊 {w.name} Status ({target_user.display_name})"
         )
 
         if w.stunned_until and w.stunned_until.timestamp() > now:
@@ -689,8 +688,6 @@ def main():
             embed.set_image(url=w.image_url)
 
         await ctx.send(embed=embed)
-
-
 
     @waifu.command()
     async def alive(ctx):
@@ -725,25 +722,43 @@ def main():
         await ctx.send("✨ Your waifu has recovered and is active again!")
 
     @waifu.command()
-    async def stats(ctx):
+    async def stats(ctx, *, args: str = ""):
         """
         .noah waifu stats
+        .noah waifu stats -user @user
         Shows advanced combat probabilities and derived values.
         """
-        w = waifu_manager.get_waifu(str(ctx.author.id))
 
+        target_user = ctx.author
+
+        # Parse optional -user flag
+        if "-user" in args:
+            parts = args.split("-user", 1)
+            _ = parts  # for readability
+
+            if not ctx.message.mentions:
+                await ctx.send("❌ Please mention a valid user after `-user`.")
+                return
+
+            target_user = ctx.message.mentions[0]
+
+        w = waifu_manager.get_waifu(str(target_user.id))
         if not w:
-            await ctx.send("❌ You don't have a waifu.")
+            if target_user == ctx.author:
+                await ctx.send("❌ You don't have a waifu.")
+            else:
+                await ctx.send(f"❌ {target_user.display_name} doesn't have a waifu.")
             return
 
         table = EmbedTable(
             headers=["Advanced Combat Data"],
-            title=f"📊 {w.name} - Advanced Stats",
+            title=f"📊 {w.name} - Advanced Stats ({target_user.display_name})",
         )
 
         table.add_row(
             [
-                f"🗡️ Damage level: **{w.stats.damage} / 30** ({w.stats.hit_damage()} pts per Hit)"
+                f"🗡️ Damage level: **{w.stats.damage} / 30** "
+                f"({w.stats.hit_damage()} pts per Hit)"
             ]
         )
 
@@ -825,15 +840,66 @@ def main():
         chart = EmbedTable(headers=["Command"], title="Waifu Game Commands")
         chart.add_row([".noah waifu set <name> -special <special name>"])
         chart.add_row([".noah waifu attack @user"])
-        chart.add_row([".noah waifu status"])
+        chart.add_row([".noah waifu status -user @user"])
         chart.add_row([".noah waifu remaining"])
         chart.add_row([".noah waifu sleep"])
         chart.add_row([".noah waifu levelup"])
-        chart.add_row([".noah waifu stats"])
+        chart.add_row([".noah waifu stats -user @user"])
         chart.add_row([".noah waifu daily"])
         chart.add_row([".noah waifu alive"])
-        chart.add_row([".noah waifu attackedby"])
+        chart.add_row([".noah waifu attackedby -user @user"])
         await ctx.send(embed=chart.render())
+
+    @waifu.command()
+    async def attackedby(ctx, *, args: str = ""):
+        """
+        .noah waifu attackedby
+        .noah waifu attackedby -user @user
+        Shows who attacked the waifu and total damage received since last death.
+        """
+
+        target_user = ctx.author
+
+        # Parse optional -user flag
+        if "-user" in args:
+            parts = args.split("-user", 1)
+            _ = parts  # keep for readability, no further use
+
+            if not ctx.message.mentions:
+                await ctx.send("❌ Please mention a valid user after `-user`.")
+                return
+
+            target_user = ctx.message.mentions[0]
+
+        w = waifu_manager.get_waifu(str(target_user.id))
+        if not w:
+            if target_user == ctx.author:
+                await ctx.send("❌ You don't have a waifu.")
+            else:
+                await ctx.send(f"❌ {target_user.display_name} doesn't have a waifu.")
+            return
+
+        if not w.received_hits:
+            await ctx.send("🛡️ No attacks received since last death.")
+            return
+
+        table = EmbedTable(
+            headers=["Attacker", "Total Damage"],
+            title=f"🩸 Damage Received ({target_user.display_name})",
+        )
+
+        for attacker_id, dmg in sorted(
+            w.received_hits.items(), key=lambda x: x[1], reverse=True
+        ):
+            user = ctx.guild.get_member(int(attacker_id))
+            name = user.display_name if user else attacker_id
+            table.add_row([name, f"{dmg} HP"])
+
+        embed = table.render()
+        if w.image_url:
+            embed.set_image(url=w.image_url)
+
+        await ctx.send(embed=embed)
 
     # ---------------- DEBUG HISTORY ---------------- #
     @bot.command()
@@ -923,39 +989,6 @@ def main():
             await ctx.send("Nothing to clear.")
         else:
             await ctx.send(f"🧹 Cleared `{count}` waifus from your steal list.")
-
-    @waifu.command()
-    async def attackedby(ctx):
-        """
-        .noah waifu attackedby
-        Shows who attacked you and total damage received since last death.
-        """
-        w = waifu_manager.get_waifu(str(ctx.author.id))
-
-        if not w:
-            await ctx.send("❌ You don't have a waifu.")
-            return
-
-        if not w.received_hits:
-            await ctx.send("🛡️ No attacks received since last death.")
-            return
-
-        table = EmbedTable(
-            headers=["Attacker", "Total Damage"], title="🩸 Damage Received"
-        )
-
-        for attacker_id, dmg in sorted(
-            w.received_hits.items(), key=lambda x: x[1], reverse=True
-        ):
-            user = ctx.guild.get_member(int(attacker_id))
-            name = user.display_name if user else attacker_id
-            table.add_row([name, f"{dmg} HP"])
-
-        embed = table.render()
-        if w.image_url:
-            embed.set_image(url=w.image_url)
-
-        await ctx.send(embed=embed)
 
     @bot.command()
     async def test_image(ctx):
