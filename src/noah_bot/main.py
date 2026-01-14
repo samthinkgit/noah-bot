@@ -898,6 +898,7 @@ def main():
         chart.add_row([".noah waifu stats -user @user"])
         chart.add_row([".noah waifu daily"])
         chart.add_row([".noah waifu alive"])
+        chart.add_row([".noah waifu setimage"])
         chart.add_row([".noah waifu attackedby -user @user"])
         await ctx.send(embed=chart.render())
 

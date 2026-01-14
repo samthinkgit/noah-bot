@@ -154,6 +154,16 @@ class WaifuGameManager:
         self._state["devmode"] = bool(enabled)
         self._save()
 
+    def waifu_set_image(self, user_id: str, image_url: str):
+        w = self.get_waifu(user_id)
+        if not w:
+            return {"ok": False, "message": "No waifu."}
+
+        w.image_url = image_url
+        self._state["users"][str(user_id)] = self._serialize_waifu(w)
+        self._save()
+        return {"ok": True, "waifu": self._public_view(w)}
+
     # ---------- Helpers ---------- #
 
     def get_waifu(self, user_id: str) -> Optional[Waifu]:
