@@ -526,11 +526,24 @@ def main():
         await ctx.send(embed=embed)
 
     @waifu.command()
-    async def remaining(ctx):
+    async def remaining(ctx, *, args: str = ""):
         """
         .noah waifu remaining
         """
-        w = waifu_manager.get_waifu(str(ctx.author.id))
+        target_user = ctx.author
+
+        # Parse optional -user flag
+        if "-user" in args:
+            parts = args.split("-user", 1)
+            _ = parts  # for readability
+
+            if not ctx.message.mentions:
+                await ctx.send("❌ Please mention a valid user after `-user`.")
+                return
+
+            target_user = ctx.message.mentions[0]
+
+        w = waifu_manager.get_waifu(str(target_user.id))
         if not w:
             await ctx.send("❌ You don't have a waifu.")
             return
