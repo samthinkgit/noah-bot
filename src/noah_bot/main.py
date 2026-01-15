@@ -878,18 +878,20 @@ def main():
 
         before = getattr(w.stats, stat)
 
+        # ❌ Reject BEFORE consuming daily
         if before >= 30:
             await ctx.send(f"⚠️ {stat.capitalize()} is already at max (30).")
             return
 
+        # ✅ CONSUME DAILY (atomic point of no return)
+        w.last_daily_date = today
+
+        # Apply stat
         setattr(w.stats, stat, before + 1)
 
         # Adjust HP if health increases
         if stat == "health":
             w.current_hp = min(w.current_hp, w.max_hp())
-
-        # ✅ SET DAILY DATE ON WAIFU ITSELF
-        w.last_daily_date = today
 
         waifu_manager._state["users"][str(ctx.author.id)] = (
             waifu_manager._serialize_waifu(w)

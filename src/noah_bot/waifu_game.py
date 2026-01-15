@@ -79,6 +79,7 @@ class Waifu:
     incapacitated_until: Optional[datetime]
     received_hits: Dict[str, int]
 
+    last_daily_date: Optional[str]
     last_sleep_date: Optional[str]
     pending_levelups: int
 
@@ -119,6 +120,7 @@ class Waifu:
 
     def now(self) -> datetime:
         return _utc_now()
+
 
 # ---------------- MANAGER ---------------- #
 
@@ -191,6 +193,7 @@ class WaifuGameManager:
             last_attack_at=None,
             stunned_until=None,
             incapacitated_until=None,
+            last_daily_date=None,
             last_sleep_date=None,
             pending_levelups=0,
             received_hits={},
@@ -384,6 +387,7 @@ class WaifuGameManager:
             "last_attack_at": _to_iso(w.last_attack_at),
             "stunned_until": _to_iso(w.stunned_until),
             "incapacitated_until": _to_iso(w.incapacitated_until),
+            "last_daily_date": w.last_daily_date,
             "last_sleep_date": w.last_sleep_date,
             "pending_levelups": w.pending_levelups,
             "received_hits": w.received_hits,
@@ -404,6 +408,7 @@ class WaifuGameManager:
             incapacitated_until=_from_iso(raw.get("incapacitated_until")),
             last_sleep_date=raw.get("last_sleep_date"),
             pending_levelups=raw.get("pending_levelups", 0),
+            last_daily_date=raw.get("last_daily_date"),
             received_hits=raw.get("received_hits", {}),
         )
 
