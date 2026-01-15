@@ -492,6 +492,10 @@ def main():
         if d.is_incapacitated(d.now()):
             await ctx.send(f"❌ {user.display_name}'s waifu is incapacitated.")
             return
+        w = waifu_manager.get_waifu(str(ctx.author.id))
+        if w.name == d.name:
+            await ctx.send("❌ You cannot attack your own waifu.")
+            return
 
         result = waifu_manager.waifu_attack(
             attacker_id=str(ctx.author.id),
