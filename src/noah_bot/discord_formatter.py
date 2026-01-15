@@ -302,23 +302,24 @@ class DiscordImageRenderer:
 
             if meta.get("local_id"):
                 local_id = meta["local_id"]
-                max_width = img.width - 20
 
-                font = self._fit_font_to_width(
-                    draw=draw,
-                    text=local_id,
-                    font_path=self.font_path_bold,
-                    max_width=max_width,
-                    start_size=48,
-                )
+                font = ImageFont.truetype(self.font_path_bold, 56)
 
                 bbox = draw.textbbox((0, 0), local_id, font=font)
                 text_w = bbox[2] - bbox[0]
+                text_h = bbox[3] - bbox[1]
 
                 lx = img_x + (img.width - text_w) // 2
-                ly = img_y + img.height - 70
+                ly = img_y + img.height - text_h - 20
 
-                self._draw_text_shadow(draw, (lx, ly), local_id, font, "white")
+                draw.text(
+                    (lx, ly),
+                    local_id,
+                    font=font,
+                    fill="white",
+                    stroke_width=4,
+                    stroke_fill="black",
+                )
 
             banner_y = img_y + self.image_size[1]
             draw.rectangle(
