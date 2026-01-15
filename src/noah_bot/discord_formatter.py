@@ -189,7 +189,6 @@ class DiscordImageRenderer:
         self.title_height = title_height
 
         try:
-            self.font = ImageFont.truetype("arial.ttf", 20)
             self.font_bold = ImageFont.truetype("arialbd.ttf", 22)
             self.font_big = ImageFont.truetype("arialbd.ttf", 48)
 
@@ -300,10 +299,11 @@ class DiscordImageRenderer:
                     except Exception:
                         pass
 
+
             if meta.get("local_id"):
                 local_id = meta["local_id"]
 
-                font = ImageFont.truetype(self.font_path_bold, 56)
+                font = self.font_big  # ← LA QUE YA FUNCIONABA
 
                 bbox = draw.textbbox((0, 0), local_id, font=font)
                 text_w = bbox[2] - bbox[0]
@@ -317,7 +317,7 @@ class DiscordImageRenderer:
                     local_id,
                     font=font,
                     fill="white",
-                    stroke_width=4,
+                    stroke_width=3,
                     stroke_fill="black",
                 )
 
