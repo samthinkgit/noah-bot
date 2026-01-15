@@ -843,21 +843,23 @@ def main():
         await ctx.send("🖼️ Waifu image set successfully!")
 
     @waifu.command()
-    async def daily(ctx):
+    async def daily(ctx, stat: str = None):
         """
-        .noah waifu daily
-        Gain +1 point in a random stat once per day.
+        .noah waifu daily [stat]
+        Gain +1 point in a chosen stat once per day.
+        If no stat is provided, it will be random.
         """
-        w = waifu_manager.get_waifu(str(ctx.author.id))
 
+        w = waifu_manager.get_waifu(str(ctx.author.id))
         if not w:
             await ctx.send("❌ You don't have a waifu.")
             return
 
+        valid_stats = ["health", "agility", "mana", "recover", "damage"]
+
         now = time.time()
         today = time.strftime("%Y-%m-%d", time.gmtime(now))
 
-        # Read last daily date safely
         raw = waifu_manager._state["users"].get(str(ctx.author.id), {})
         last_daily = raw.get("last_daily_date")
 
@@ -865,20 +867,33 @@ def main():
             await ctx.send("⏳ You already used your daily training today.")
             return
 
-        # Pick random stat
-        stat = random.choice(["health", "agility", "mana", "recover", "damage"])
+        # Validate or pick stat
+        if stat:
+            stat = stat.lower()
+            if stat not in valid_stats:
+                await ctx.send(
+                    "❌ Invalid stat. Choose one of: "
+                    "`health`, `agility`, `mana`, `recover`, `damage`"
+                )
+                return
+        else:
+            stat = random.choice(valid_stats)
+
         before = getattr(w.stats, stat)
-        after = min(30, before + 1)
+
+        if before >= 30:
+            await ctx.send(f"⚠️ {stat.capitalize()} is already at max (30).")
+            return
+
+        after = before + 1
         setattr(w.stats, stat, after)
 
-        # If health increased, adjust HP cap safely
+        # Adjust HP safely if health increases
         if stat == "health":
             w.current_hp = min(w.current_hp, w.max_hp())
 
-        # Serialize ONLY from waifu object (single source of truth)
         data = waifu_manager._serialize_waifu(w)
         data["last_daily_date"] = today
-
         waifu_manager._state["users"][str(ctx.author.id)] = data
         waifu_manager._save()
 
@@ -1025,7 +1040,7 @@ def main():
         embed = steallist.render_embed(
             records,
             title="🗡️ Steal List",
-            subtitle=f"{ctx.author.display_name}'s pending waifus",
+            subtitle=f"{ctx.author.display_/dname}'s pending waifus",
         )
         await ctx.send(embed=embed)
 
