@@ -672,7 +672,9 @@ def main():
             headers=["Stat"], title=f"📊 {w.name} Status ({target_user.display_name})"
         )
 
+        incapacitated = False
         if w.incapacitated_until and w.incapacitated_until.timestamp() > now:
+            incapacitated = True
             remaining = int(w.incapacitated_until.timestamp() - now)
             table.add_row(["Status: 🩸 Incapacitated"])
             table.add_row(
@@ -688,7 +690,10 @@ def main():
             table.add_row(["Status: Active\n"])
 
         table.add_row([f"**Level**: {w.level()}\n"])
-        table.add_row([f"❤️ **HP**: {w.current_hp} / {w.max_hp()}"])
+        if not incapacitated:
+            table.add_row([f"❤️ **HP**: {w.current_hp} / {w.max_hp()}"])
+        else:
+            table.add_row([f"❤️ **HP**: 0 / {w.max_hp()} (Incapacitated)"])
         table.add_row([f"🤸‍♀️ **Agility**: {w.stats.agility}"])
         table.add_row([f"🔮 **Mana**: {w.stats.mana}"])
         table.add_row([f"💪 **Recover**: {w.stats.recover}"])
