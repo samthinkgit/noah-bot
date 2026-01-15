@@ -8,6 +8,39 @@ from typing import Optional
 import discord
 
 
+RARITY_COLORS = {
+    "alpha": 0x3A423A,
+    "beta": 0x357233,
+    "gamma": 0x560000,
+    "delta": 0x1D1D1D,
+    "sigma": 0xE95C20,
+    "epsilon": 0x5E258D,
+    "zeta": 0xF54CE7,
+    "omega": 0xB9F2FF,
+}
+
+RARITY_SYMBOLS = {
+    "alpha": "α",
+    "beta": "β",
+    "gamma": "γ",
+    "delta": "δ",
+    "sigma": "σ",
+    "epsilon": "ε",
+    "zeta": "ζ",
+    "omega": "ω",
+}
+RARITY_DISPLAY = {
+    "alpha": "Alpha",
+    "beta": "Beta",
+    "gamma": "Gamma",
+    "delta": "Delta",
+    "sigma": "Sigma",
+    "epsilon": "Epsilon",
+    "zeta": "Zeta",
+    "omega": "Omega",
+}
+
+
 class EmbedTable:
     """
     Render tables in Discord using embeds.

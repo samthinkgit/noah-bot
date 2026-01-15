@@ -1,4 +1,5 @@
 import os
+import re
 import random
 import time
 import discord
@@ -15,6 +16,9 @@ from noah_bot.discord_formatter import (
     UserEmojiManager,
     EmbedTable,
     DiscordImageRenderer,
+    RARITY_COLORS,
+    RARITY_SYMBOLS,
+    RARITY_DISPLAY,
 )
 from noah_bot.waifu_game import WaifuGameManager
 
@@ -315,6 +319,7 @@ def main():
         chart.add_row([".noah summary", "Summarize recent channel messages."])
         chart.add_row([".noah behonest <question>", "Ask Noah without filters."])
         chart.add_row([".noah merge", "Render all images from a replied message."])
+        chart.add_row([".noah if <type>", "Invert embed rarity symbol and color."])
         chart.add_row([".noah ping", "Check if Noah is responsive."])
         chart.add_row([".noah help", "Show Noah AI commands."])
         chart.add_row([".waifuracer help", "Show waifuracer commands."])
@@ -433,6 +438,94 @@ def main():
         buffer.seek(0)
 
         await ctx.send(file=discord.File(buffer, filename="rendered_images.png"))
+
+    @noah.command(name="if")
+    async def invert_rarity(ctx, rarity: str):
+        """
+        .noah if <type>
+        Rewrites the embed rarity name, symbol and color.
+        """
+        await ctx.typing()
+
+        rarity = rarity.lower()
+
+        if rarity not in RARITY_COLORS:
+            await ctx.send("❌ Unknown rarity type.")
+            return
+
+        if not ctx.message.reference:
+            await ctx.send("❌ You must reply to a message containing an embed.")
+            return
+
+        try:
+            replied_msg = await ctx.channel.fetch_message(
+                ctx.message.reference.message_id
+            )
+        except Exception:
+            await ctx.send("❌ Original message not found.")
+            return
+
+        if not replied_msg.embeds:
+            await ctx.send("❌ No embed found in the replied message.")
+            return
+
+        original = replied_msg.embeds[0]
+
+        # Parse original metadata
+        meta = _parse_embed_metadata(original)
+
+        # Clone embed
+        new_embed = discord.Embed(
+            title=original.title,
+            description=original.description,
+            color=RARITY_COLORS[rarity],
+            url=original.url,
+        )
+
+        # Replace rarity line: "Type: Beta    (β)" → "Type: Zeta (ζ)"
+        if new_embed.description:
+            new_name = RARITY_DISPLAY[rarity]
+            new_symbol = RARITY_SYMBOLS[rarity]
+
+            new_embed.description = re.sub(
+                r"(Type:\s*)(Alpha|Beta|Gamma|Delta|Sigma|Epsilon|Zeta|Omega)\s*\([^)]*\)",
+                rf"\1{new_name} ({new_symbol})",
+                new_embed.description,
+                count=1,
+            )
+
+            # Safety fallback: replace symbol if something odd slipped through
+            if meta.get("rarity"):
+                old_symbol = meta["rarity"]
+                new_embed.description = new_embed.description.replace(
+                    f"({old_symbol})",
+                    f"({new_symbol})",
+                )
+
+        # Copy image
+        if original.image and original.image.url:
+            new_embed.set_image(url=original.image.url)
+
+        # Copy thumbnail
+        if original.thumbnail and original.thumbnail.url:
+            new_embed.set_thumbnail(url=original.thumbnail.url)
+
+        # Copy footer
+        if original.footer and original.footer.text:
+            new_embed.set_footer(
+                text=original.footer.text,
+                icon_url=original.footer.icon_url,
+            )
+
+        # Copy author
+        if original.author and original.author.name:
+            new_embed.set_author(
+                name=original.author.name,
+                icon_url=original.author.icon_url,
+                url=original.author.url,
+            )
+
+        await ctx.send(embed=new_embed)
 
     # ---------------- WAIFU GAME ---------------- #
     @noah.group()
