@@ -1112,6 +1112,40 @@ def main():
         await ctx.send(f"🎨 Waifu embed color set to `#{value:06x}`")
 
     @waifu.command()
+    async def setpeacefulmode(ctx, user: discord.Member):
+        """
+        .noah waifu setpeacefulmode @user
+        Instantly kills a waifu for 1 year (peaceful mode).
+        """
+
+        result = waifu_manager.waifu_peaceful_kill(
+            attacker_id=str(ctx.author.id),
+            target_id=str(user.id),
+        )
+
+        if not result["ok"]:
+            await ctx.send(f"❌ {result['message']}")
+            return
+
+        table = EmbedTable(
+            headers=["Peaceful Mode"],
+            title="☮️ Peaceful Resolution Applied",
+        )
+
+        table.add_row([f"Target: **{user.display_name}**"])
+        table.add_row(["Status: ☠️ Instantly incapacitated"])
+        table.add_row(["Respawn: **1 year**"])
+
+        w = waifu_manager.get_waifu(str(ctx.author.id))
+        embed = table.render()
+
+        if w and w.embed_color is not None:
+            embed.color = w.embed_color
+
+        await ctx.send(embed=embed)
+
+
+    @waifu.command()
     async def help(ctx):  # noqa
         chart = EmbedTable(headers=["Command"], title="Waifu Game Commands")
         chart.add_row([".noah waifu set <name> -special <special name>"])

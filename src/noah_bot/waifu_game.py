@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 SCHEMA_VERSION = 2
 INCAP_SECONDS = 12 * 60 * 60  # 12h incapacitated
 STUN_SECONDS = 3 * 60 * 60  # 3h stun
+PEACEFUL_INCAP_SECONDS = 365 * 24 * 60 * 60  # 1 year
 
 
 def _utc_now() -> datetime:
@@ -329,6 +330,39 @@ class WaifuGameManager:
             "defender_hp_after": defender_hp_after,
             "stunned_applied": stunned_applied,
             "killed": killed,
+        }
+
+    def waifu_peaceful_kill(self, attacker_id: str, target_id: str, now=None):
+        now = now or _utc_now()
+
+        attacker = self.get_waifu(attacker_id)
+        target = self.get_waifu(target_id)
+
+        if not attacker or not target:
+            return {"ok": False, "message": "Missing waifu."}
+
+        if not self.devmode:
+            if attacker.is_incapacitated(now) or attacker.is_stunned(now):
+                return {"ok": False, "message": "Your waifu cannot act right now."}
+
+        # Instant kill
+        target.current_hp = 0
+        target.received_hits = {}
+        target.stunned_until = None
+        target.incapacitated_until = now + timedelta(seconds=PEACEFUL_INCAP_SECONDS)
+
+        # Consume cooldown
+        if not self.devmode:
+            attacker.last_attack_at = now
+
+        self._state["users"][str(attacker_id)] = self._serialize_waifu(attacker)
+        self._state["users"][str(target_id)] = self._serialize_waifu(target)
+        self._save()
+
+        return {
+            "ok": True,
+            "target_name": target.name,
+            "revive_at": target.incapacitated_until.isoformat(),
         }
 
     def waifu_sleep(self, user_id: str, now=None):
