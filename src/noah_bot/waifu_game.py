@@ -286,11 +286,11 @@ class WaifuGameManager:
 
             # Reset defender state
             d.received_hits = {}
-            d.heal_half()
+            d.heal_full()
             d.incapacitated_until = now + timedelta(seconds=INCAP_SECONDS)
 
             # Reward attacker with full heal (your original rule)
-            a.heal_full()
+            a.heal_half()
 
             # What do we report as hp_after? (keep it consistent for UI)
             defender_hp_after = 0  # shows the kill correctly
