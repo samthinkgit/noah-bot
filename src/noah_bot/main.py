@@ -847,7 +847,6 @@ def main():
         """
         .noah waifu daily [stat]
         Gain +1 point in a chosen stat once per day.
-        If no stat is provided, it will be random.
         """
 
         w = waifu_manager.get_waifu(str(ctx.author.id))
@@ -857,17 +856,15 @@ def main():
 
         valid_stats = ["health", "agility", "mana", "recover", "damage"]
 
-        now = time.time()
-        today = time.strftime("%Y-%m-%d", time.gmtime(now))
+        now = w.now()
+        today = now.date().isoformat()
 
-        raw = waifu_manager._state["users"].get(str(ctx.author.id), {})
-        last_daily = raw.get("last_daily_date")
-
-        if last_daily == today and not waifu_manager.devmode:
+        # ✅ SINGLE SOURCE OF TRUTH
+        if w.last_daily_date == today and not waifu_manager.devmode:
             await ctx.send("⏳ You already used your daily training today.")
             return
 
-        # Validate or pick stat
+        # Validate stat or pick random
         if stat:
             stat = stat.lower()
             if stat not in valid_stats:
@@ -885,16 +882,18 @@ def main():
             await ctx.send(f"⚠️ {stat.capitalize()} is already at max (30).")
             return
 
-        after = before + 1
-        setattr(w.stats, stat, after)
+        setattr(w.stats, stat, before + 1)
 
-        # Adjust HP safely if health increases
+        # Adjust HP if health increases
         if stat == "health":
             w.current_hp = min(w.current_hp, w.max_hp())
 
-        data = waifu_manager._serialize_waifu(w)
-        data["last_daily_date"] = today
-        waifu_manager._state["users"][str(ctx.author.id)] = data
+        # ✅ SET DAILY DATE ON WAIFU ITSELF
+        w.last_daily_date = today
+
+        waifu_manager._state["users"][str(ctx.author.id)] = (
+            waifu_manager._serialize_waifu(w)
+        )
         waifu_manager._save()
 
         table = EmbedTable(
@@ -903,7 +902,7 @@ def main():
         )
 
         table.add_row([f"📈 Stat upgraded: **{stat.capitalize()} +1**"])
-        table.add_row([f"🔢 New value: **{after} / 30**"])
+        table.add_row([f"🔢 New value: **{getattr(w.stats, stat)} / 30**"])
         table.add_row(["⏳ Available again: **Tomorrow**"])
 
         embed = table.render()
@@ -922,7 +921,7 @@ def main():
         chart.add_row([".noah waifu sleep"])
         chart.add_row([".noah waifu levelup"])
         chart.add_row([".noah waifu stats -user @user"])
-        chart.add_row([".noah waifu daily"])
+        chart.add_row([".noah waifu daily <stat>"])
         chart.add_row([".noah waifu alive"])
         chart.add_row([".noah waifu setimage"])
         chart.add_row([".noah waifu attackedby -user @user"])
@@ -1040,7 +1039,7 @@ def main():
         embed = steallist.render_embed(
             records,
             title="🗡️ Steal List",
-            subtitle=f"{ctx.author.display_/dname}'s pending waifus",
+            subtitle=f"{ctx.author.display_name}'s pending waifus",
         )
         await ctx.send(embed=embed)
 
