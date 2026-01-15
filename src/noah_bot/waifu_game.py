@@ -117,6 +117,8 @@ class Waifu:
             + self.stats.damage
         )
 
+    def now(self) -> datetime:
+        return _utc_now()
 
 # ---------------- MANAGER ---------------- #
 

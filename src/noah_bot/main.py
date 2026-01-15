@@ -488,6 +488,11 @@ def main():
         """
         .noah waifu attack @user
         """
+        d = waifu_manager.get_waifu(str(user.id))
+        if d.is_incapacitated(d.now()):
+            await ctx.send(f"❌ {user.display_name}'s waifu is incapacitated.")
+            return
+
         result = waifu_manager.waifu_attack(
             attacker_id=str(ctx.author.id),
             defender_id=str(user.id),
@@ -698,7 +703,7 @@ def main():
         table.add_row([f"🔮 **Mana**: {w.stats.mana}"])
         table.add_row([f"💪 **Recover**: {w.stats.recover}"])
         table.add_row([f"🗡️ **Damage**: {w.stats.hit_damage()}"])
-        table.add_row([f"⏳ **Cooldown**: {w.stats.cooldown_seconds() // 60} min"])
+        table.add_row([f"⏳ **Cooldown**: {w.stats.cooldown_seconds() // 60} min\n"])
         table.add_row([f"Special: {w.special_name}"])
         table.add_row([f"Pending Levelups: {w.pending_levelups}"])
         table.add_row([f"Last Sleep: {w.last_sleep_date}"])
