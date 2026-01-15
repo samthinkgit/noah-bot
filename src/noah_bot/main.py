@@ -322,7 +322,9 @@ def main():
         chart.add_row([".noah if <type>", "Invert embed rarity symbol and color."])
         chart.add_row([".noah ping", "Check if Noah is responsive."])
         chart.add_row([".noah help", "Show Noah AI commands."])
-        chart.add_row([".waifuracer setemoji <emoji>", "Set your claim reaction emoji."])
+        chart.add_row(
+            [".waifuracer setemoji <emoji>", "Set your claim reaction emoji."]
+        )
         chart.add_row([".waifuracer help", "Show waifuracer commands."])
         chart.add_row([".noah waifu help", "Show waifu battle commands"])
         chart.add_row([".steallist help", "Show steallist commands."])
@@ -563,7 +565,9 @@ def main():
         w: Waifu = result["waifu"]
         stats = w["stats"]
 
-        table = EmbedTable(headers=["Stat"], title=f"🖤 {w['name']} created", color=w.embed_color)
+        table = EmbedTable(
+            headers=["Stat"], title=f"🖤 {w['name']} created", color=w.embed_color
+        )
 
         table.add_row([f"❤️ Health: {w['hp']} / {w['max_hp']}"])
         table.add_row([f"🤸‍♀️ Agility: {stats['agility']}"])
@@ -600,7 +604,9 @@ def main():
             await ctx.send(f"❌ {result.get('message', 'Attack failed')}")
             return
 
-        table = EmbedTable(headers=["Event"], title="⚔️ Waifu Battle", color=w.embed_color)
+        table = EmbedTable(
+            headers=["Event"], title="⚔️ Waifu Battle", color=w.embed_color
+        )
         table.description = (
             f"`{ctx.author.display_name}` attacked `{user.display_name}`'s waifu"
         )
@@ -1066,6 +1072,46 @@ def main():
         await ctx.send(embed=embed)
 
     @waifu.command()
+    async def setcolor(ctx, color: str):
+        """
+        .noah waifu setcolor <hex | random | reset>
+        Examples:
+        .noah waifu setcolor #ff00ff
+        .noah waifu setcolor random
+        .noah waifu setcolor reset
+        """
+
+        w = waifu_manager.get_waifu(str(ctx.author.id))
+        if not w:
+            await ctx.send("❌ You don't have a waifu.")
+            return
+
+        if color.lower() == "reset":
+            result = waifu_manager.waifu_set_color(str(ctx.author.id), None)
+            await ctx.send("🎨 Embed color reset to default.")
+            return
+
+        if color.lower() == "random":
+            value = random.randint(0x000000, 0xFFFFFF)
+        else:
+            if color.startswith("#"):
+                color = color[1:]
+            try:
+                value = int(color, 16)
+            except ValueError:
+                await ctx.send(
+                    "❌ Invalid color. Use hex like `#ff00ff`, `random`, or `reset`."
+                )
+                return
+
+        result = waifu_manager.waifu_set_color(str(ctx.author.id), value)
+        if not result["ok"]:
+            await ctx.send(f"❌ {result['message']}")
+            return
+
+        await ctx.send(f"🎨 Waifu embed color set to `#{value:06x}`")
+
+    @waifu.command()
     async def help(ctx):  # noqa
         chart = EmbedTable(headers=["Command"], title="Waifu Game Commands")
         chart.add_row([".noah waifu set <name> -special <special name>"])
@@ -1078,6 +1124,7 @@ def main():
         chart.add_row([".noah waifu daily <stat>"])
         chart.add_row([".noah waifu alive"])
         chart.add_row([".noah waifu setimage"])
+        chart.add_row([".noah waifu setcolor <hex | random | reset>"])
         chart.add_row([".noah waifu attackedby -user @user"])
         await ctx.send(embed=chart.render())
 
