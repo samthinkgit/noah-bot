@@ -701,6 +701,7 @@ def main():
         table.add_row([f"⏳ **Cooldown**: {w.stats.cooldown_seconds() // 60} min"])
         table.add_row([f"Special: {w.special_name}"])
         table.add_row([f"Pending Levelups: {w.pending_levelups}"])
+        table.add_row([f"Last Sleep: {w.last_sleep_date}"])
 
         embed = table.render()
         if w.image_url:
