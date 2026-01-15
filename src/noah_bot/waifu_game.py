@@ -82,6 +82,7 @@ class Waifu:
     last_daily_date: Optional[str]
     last_sleep_date: Optional[str]
     pending_levelups: int
+    embed_color: Optional[int]  # <-- NEW
 
     def max_hp(self) -> int:
         return _clamp(self.stats.health, 1, 30)
@@ -178,6 +179,17 @@ class WaifuGameManager:
 
     # ---------- Core Actions ---------- #
 
+    def waifu_set_color(self, user_id: str, color: int):
+        w = self.get_waifu(user_id)
+        if not w:
+            return {"ok": False, "message": "No waifu."}
+
+        w.embed_color = color
+        self._state["users"][str(user_id)] = self._serialize_waifu(w)
+        self._save()
+
+        return {"ok": True, "color": color}
+
     def waifu_set(
         self, user_id: str, waifu_name: str, special_name: str, image_url=None
     ):
@@ -197,6 +209,7 @@ class WaifuGameManager:
             last_sleep_date=None,
             pending_levelups=0,
             received_hits={},
+            embed_color=None,
         )
 
         self._state["users"][str(user_id)] = self._serialize_waifu(w)
@@ -391,6 +404,7 @@ class WaifuGameManager:
             "last_sleep_date": w.last_sleep_date,
             "pending_levelups": w.pending_levelups,
             "received_hits": w.received_hits,
+            "embed_color": w.embed_color,
         }
 
     def _deserialize_waifu(self, raw: Dict[str, Any]) -> Waifu:
@@ -410,6 +424,7 @@ class WaifuGameManager:
             pending_levelups=raw.get("pending_levelups", 0),
             last_daily_date=raw.get("last_daily_date"),
             received_hits=raw.get("received_hits", {}),
+            embed_color=raw.get("embed_color", None),
         )
 
         w.current_hp = _clamp(w.current_hp, 0, w.max_hp())

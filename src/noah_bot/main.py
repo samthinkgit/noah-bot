@@ -20,7 +20,7 @@ from noah_bot.discord_formatter import (
     RARITY_SYMBOLS,
     RARITY_DISPLAY,
 )
-from noah_bot.waifu_game import WaifuGameManager
+from noah_bot.waifu_game import WaifuGameManager, Waifu
 
 
 from noah_bot.leaderboard import Leaderboard, generate_date
@@ -322,8 +322,9 @@ def main():
         chart.add_row([".noah if <type>", "Invert embed rarity symbol and color."])
         chart.add_row([".noah ping", "Check if Noah is responsive."])
         chart.add_row([".noah help", "Show Noah AI commands."])
+        chart.add_row([".waifuracer setemoji <emoji>", "Set your claim reaction emoji."])
         chart.add_row([".waifuracer help", "Show waifuracer commands."])
-        chart.add_row([".waifuracer help", "Show waifuracer commands."])
+        chart.add_row([".noah waifu help", "Show waifu battle commands"])
         chart.add_row([".steallist help", "Show steallist commands."])
 
         await ctx.send(embed=chart.render())
@@ -559,10 +560,10 @@ def main():
             await ctx.send(f"❌ {result.get('message', 'Error')}")
             return
 
-        w = result["waifu"]
+        w: Waifu = result["waifu"]
         stats = w["stats"]
 
-        table = EmbedTable(headers=["Stat"], title=f"🖤 {w['name']} created")
+        table = EmbedTable(headers=["Stat"], title=f"🖤 {w['name']} created", color=w.embed_color)
 
         table.add_row([f"❤️ Health: {w['hp']} / {w['max_hp']}"])
         table.add_row([f"🤸‍♀️ Agility: {stats['agility']}"])
@@ -599,7 +600,7 @@ def main():
             await ctx.send(f"❌ {result.get('message', 'Attack failed')}")
             return
 
-        table = EmbedTable(headers=["Event"], title="⚔️ Waifu Battle")
+        table = EmbedTable(headers=["Event"], title="⚔️ Waifu Battle", color=w.embed_color)
         table.description = (
             f"`{ctx.author.display_name}` attacked `{user.display_name}`'s waifu"
         )
@@ -875,6 +876,7 @@ def main():
         table = EmbedTable(
             headers=["Advanced Combat Data"],
             title=f"📊 {w.name} - Advanced Stats ({target_user.display_name})",
+            color=w.embed_color,
         )
 
         table.add_row(
@@ -998,6 +1000,7 @@ def main():
         table = EmbedTable(
             headers=["Daily Training"],
             title="🌅 Daily Training Complete",
+            color=w.embed_color,
         )
 
         table.add_row([f"📈 Stat upgraded: **{stat.capitalize()} +1**"])
@@ -1009,22 +1012,6 @@ def main():
             embed.set_image(url=w.image_url)
 
         await ctx.send(embed=embed)
-
-    @waifu.command()
-    async def help(ctx):  # noqa
-        chart = EmbedTable(headers=["Command"], title="Waifu Game Commands")
-        chart.add_row([".noah waifu set <name> -special <special name>"])
-        chart.add_row([".noah waifu attack @user"])
-        chart.add_row([".noah waifu status -user @user"])
-        chart.add_row([".noah waifu remaining -user @user"])
-        chart.add_row([".noah waifu sleep"])
-        chart.add_row([".noah waifu levelup"])
-        chart.add_row([".noah waifu stats -user @user"])
-        chart.add_row([".noah waifu daily <stat>"])
-        chart.add_row([".noah waifu alive"])
-        chart.add_row([".noah waifu setimage"])
-        chart.add_row([".noah waifu attackedby -user @user"])
-        await ctx.send(embed=chart.render())
 
     @waifu.command()
     async def attackedby(ctx, *, args: str = ""):
@@ -1062,6 +1049,7 @@ def main():
         table = EmbedTable(
             headers=["Attacker"],
             title=f"🩸 Damage Received ({target_user.display_name})",
+            color=w.embed_color,
         )
 
         for attacker_id, dmg in sorted(
@@ -1076,6 +1064,22 @@ def main():
             embed.set_image(url=w.image_url)
 
         await ctx.send(embed=embed)
+
+    @waifu.command()
+    async def help(ctx):  # noqa
+        chart = EmbedTable(headers=["Command"], title="Waifu Game Commands")
+        chart.add_row([".noah waifu set <name> -special <special name>"])
+        chart.add_row([".noah waifu attack @user"])
+        chart.add_row([".noah waifu status -user @user"])
+        chart.add_row([".noah waifu remaining -user @user"])
+        chart.add_row([".noah waifu sleep"])
+        chart.add_row([".noah waifu levelup"])
+        chart.add_row([".noah waifu stats -user @user"])
+        chart.add_row([".noah waifu daily <stat>"])
+        chart.add_row([".noah waifu alive"])
+        chart.add_row([".noah waifu setimage"])
+        chart.add_row([".noah waifu attackedby -user @user"])
+        await ctx.send(embed=chart.render())
 
     # ---------------- DEBUG HISTORY ---------------- #
     @bot.command()
