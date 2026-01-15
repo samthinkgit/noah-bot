@@ -190,7 +190,7 @@ class DiscordImageRenderer:
 
         try:
             self.font_bold = ImageFont.truetype("arialbd.ttf", 22)
-            self.font_big = ImageFont.truetype("arialbd.ttf", 48)
+            self.font_big = ImageFont.truetype("arialbd.ttf", 64)
 
         except Exception:
             self.font = ImageFont.load_default()
