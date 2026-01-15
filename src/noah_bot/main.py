@@ -669,7 +669,15 @@ def main():
             return
 
         now = time.time()
-        table = EmbedTable(headers=["Info"], title="⏳ Waifu Status")
+        table = EmbedTable(
+            headers=["Info"],
+            title="⏳ Waifu Status",
+            color=(
+                discord.Color(w.embed_color)
+                if w.embed_color
+                else discord.Color.blurple()  # noqa
+            ),
+        )
 
         if w.stunned_until and not waifu_manager.devmode:
             remaining = int(w.stunned_until.timestamp() - now)
@@ -788,8 +796,15 @@ def main():
             return
 
         now = time.time()
+        color = (
+            discord.Color(w.embed_color)
+            if w.embed_color
+            else discord.Color.blurple()  # noqa
+        )
         table = EmbedTable(
-            headers=["Stat"], title=f"📊 {w.name} Status ({target_user.display_name})"
+            headers=["Stat"],
+            title=f"📊 {w.name} Status ({target_user.display_name})",
+            color=color,
         )
 
         incapacitated = False
