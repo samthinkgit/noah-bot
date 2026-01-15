@@ -672,17 +672,17 @@ def main():
             headers=["Stat"], title=f"📊 {w.name} Status ({target_user.display_name})"
         )
 
-        if w.stunned_until and w.stunned_until.timestamp() > now:
-            remaining = int(w.stunned_until.timestamp() - now)
-            table.add_row(["Status: 😵 Stunned"])
-            table.add_row(
-                [f"Free in: {remaining // 3600}h {(remaining % 3600) // 60}m\n"]
-            )
-        elif w.incapacitated_until and w.incapacitated_until.timestamp() > now:
+        if w.incapacitated_until and w.incapacitated_until.timestamp() > now:
             remaining = int(w.incapacitated_until.timestamp() - now)
             table.add_row(["Status: 🩸 Incapacitated"])
             table.add_row(
                 [f"Recovery in: {remaining // 3600}h {(remaining % 3600) // 60}m\n"]
+            )
+        elif w.stunned_until and w.stunned_until.timestamp() > now:
+            remaining = int(w.stunned_until.timestamp() - now)
+            table.add_row(["Status: 😵 Stunned"])
+            table.add_row(
+                [f"Free in: {remaining // 3600}h {(remaining % 3600) // 60}m\n"]
             )
         else:
             table.add_row(["Status: Active\n"])
