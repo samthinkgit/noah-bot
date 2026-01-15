@@ -936,16 +936,16 @@ def main():
             return
 
         table = EmbedTable(
-            headers=["Attacker", "Total Damage"],
+            headers=["Attacker"],
             title=f"🩸 Damage Received ({target_user.display_name})",
         )
 
         for attacker_id, dmg in sorted(
             w.received_hits.items(), key=lambda x: x[1], reverse=True
         ):
-            user = ctx.guild.get_member(int(attacker_id))
-            name = user.display_name if user else attacker_id
-            table.add_row([name, f"{dmg} HP"])
+            member = ctx.guild.get_member(int(attacker_id))
+            name = member.mention if member else f"<@{attacker_id}>"
+            table.add_row([f"{name}: {dmg} HP"])
 
         embed = table.render()
         if w.image_url:
