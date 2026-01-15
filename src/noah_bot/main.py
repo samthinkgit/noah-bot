@@ -20,7 +20,7 @@ from noah_bot.discord_formatter import (
     RARITY_SYMBOLS,
     RARITY_DISPLAY,
 )
-from noah_bot.waifu_game import WaifuGameManager, Waifu
+from noah_bot.waifu_game import WaifuGameManager, Waifu, PEACEFUL_INCAP_SECONDS
 
 
 from noah_bot.leaderboard import Leaderboard, generate_date
@@ -565,8 +565,13 @@ def main():
         w: Waifu = result["waifu"]
         stats = w["stats"]
 
+        color = (
+            discord.Color(w.embed_color)
+            if w.embed_color
+            else discord.Color.blurple()  # noqa
+        )
         table = EmbedTable(
-            headers=["Stat"], title=f"🖤 {w['name']} created", color=w.embed_color
+            headers=["Stat"], title=f"🖤 {w['name']} created", color=color
         )
 
         table.add_row([f"❤️ Health: {w['hp']} / {w['max_hp']}"])
@@ -605,7 +610,13 @@ def main():
             return
 
         table = EmbedTable(
-            headers=["Event"], title="⚔️ Waifu Battle", color=w.embed_color
+            headers=["Event"],
+            title="⚔️ Waifu Battle",
+            color=(
+                discord.Color(w.embed_color)
+                if w.embed_color
+                else discord.Color.blurple()
+            ),
         )
         table.description = (
             f"`{ctx.author.display_name}` attacked `{user.display_name}`'s waifu"
@@ -882,7 +893,11 @@ def main():
         table = EmbedTable(
             headers=["Advanced Combat Data"],
             title=f"📊 {w.name} - Advanced Stats ({target_user.display_name})",
-            color=w.embed_color,
+            color=(
+                discord.Color(w.embed_color)
+                if w.embed_color
+                else discord.Color.blurple()
+            ),
         )
 
         table.add_row(
@@ -1006,7 +1021,11 @@ def main():
         table = EmbedTable(
             headers=["Daily Training"],
             title="🌅 Daily Training Complete",
-            color=w.embed_color,
+            color=(
+                discord.Color(w.embed_color)
+                if w.embed_color
+                else discord.Color.blurple()
+            ),
         )
 
         table.add_row([f"📈 Stat upgraded: **{stat.capitalize()} +1**"])
@@ -1055,7 +1074,11 @@ def main():
         table = EmbedTable(
             headers=["Attacker"],
             title=f"🩸 Damage Received ({target_user.display_name})",
-            color=w.embed_color,
+            color=(
+                discord.Color(w.embed_color)
+                if w.embed_color
+                else discord.Color.blurple()
+            ),
         )
 
         for attacker_id, dmg in sorted(
@@ -1143,7 +1166,6 @@ def main():
             embed.color = w.embed_color
 
         await ctx.send(embed=embed)
-
 
     @waifu.command()
     async def help(ctx):  # noqa
