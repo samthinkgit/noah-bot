@@ -299,7 +299,6 @@ class DiscordImageRenderer:
                     except Exception:
                         pass
 
-
             if meta.get("local_id"):
                 local_id = meta["local_id"]
 
@@ -310,16 +309,30 @@ class DiscordImageRenderer:
                 text_h = bbox[3] - bbox[1]
 
                 lx = img_x + (img.width - text_w) // 2
-                ly = img_y + img.height - 90
+                ly = img_y + img.height - text_h - 20
 
-                draw.text(
-                    (lx, ly),
+                # render text to its own image and SCALE IT
+                mask = Image.new("RGBA", (text_w + 20, text_h + 20), (0, 0, 0, 0))
+                mask_draw = ImageDraw.Draw(mask)
+
+                mask_draw.text(
+                    (10, 10),
                     local_id,
                     font=font,
                     fill="white",
                     stroke_width=3,
                     stroke_fill="black",
                 )
+
+                # SCALE FACTOR (THIS IS THE SIZE)
+                SCALE = 1.6  # <-- increase this if you want it bigger
+
+                mask = mask.resize(
+                    (int(mask.width * SCALE), int(mask.height * SCALE)),
+                    Image.LANCZOS,
+                )
+
+                canvas.paste(mask, (lx, ly), mask)
 
             banner_y = img_y + self.image_size[1]
             draw.rectangle(
