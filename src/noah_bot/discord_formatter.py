@@ -188,8 +188,8 @@ class DiscordImageRenderer:
         self.image_size = image_size
         self.title_height = title_height
 
-        self.font_bold = ImageFont.truetype("arialbd.ttf", 22)
-        self.font_big = ImageFont.truetype("arialbd.ttf", 90)
+        self.font_bold = ImageFont.truetype("DejaVuSans-Bold.ttf", 22)
+        self.font_big = ImageFont.truetype("DejaVuSans-Bold.ttf", 40)
 
     def _download_image(self, url: str) -> Image.Image:
         response = requests.get(url, timeout=10)
