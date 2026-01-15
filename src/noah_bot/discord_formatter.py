@@ -188,14 +188,8 @@ class DiscordImageRenderer:
         self.image_size = image_size
         self.title_height = title_height
 
-        try:
-            self.font_bold = ImageFont.truetype("arialbd.ttf", 22)
-            self.font_big = ImageFont.truetype("arialbd.ttf", 64)
-
-        except Exception:
-            self.font = ImageFont.load_default()
-            self.font_bold = self.font
-            self.font_big = self.font
+        self.font_bold = ImageFont.truetype("arialbd.ttf", 22)
+        self.font_big = ImageFont.truetype("arialbd.ttf", 90)
 
     def _download_image(self, url: str) -> Image.Image:
         response = requests.get(url, timeout=10)
@@ -302,7 +296,7 @@ class DiscordImageRenderer:
             if meta.get("local_id"):
                 local_id = meta["local_id"]
 
-                font = self.font_big  # ← LA QUE YA FUNCIONABA
+                font = self.font_big
 
                 bbox = draw.textbbox((0, 0), local_id, font=font)
                 text_w = bbox[2] - bbox[0]
@@ -311,28 +305,14 @@ class DiscordImageRenderer:
                 lx = img_x + (img.width - text_w) // 2
                 ly = img_y + img.height - text_h - 20
 
-                # render text to its own image and SCALE IT
-                mask = Image.new("RGBA", (text_w + 20, text_h + 20), (0, 0, 0, 0))
-                mask_draw = ImageDraw.Draw(mask)
-
-                mask_draw.text(
-                    (10, 10),
+                draw.text(
+                    (lx, ly),
                     local_id,
                     font=font,
                     fill="white",
                     stroke_width=3,
                     stroke_fill="black",
                 )
-
-                # SCALE FACTOR (THIS IS THE SIZE)
-                SCALE = 1.6  # <-- increase this if you want it bigger
-
-                mask = mask.resize(
-                    (int(mask.width * SCALE), int(mask.height * SCALE)),
-                    Image.LANCZOS,
-                )
-
-                canvas.paste(mask, (lx, ly), mask)
 
             banner_y = img_y + self.image_size[1]
             draw.rectangle(
