@@ -192,6 +192,7 @@ class DiscordImageRenderer:
             self.font = ImageFont.truetype("arial.ttf", 20)
             self.font_bold = ImageFont.truetype("arialbd.ttf", 22)
             self.font_big = ImageFont.truetype("arialbd.ttf", 48)
+
         except Exception:
             self.font = ImageFont.load_default()
             self.font_bold = self.font
@@ -202,37 +203,17 @@ class DiscordImageRenderer:
         response.raise_for_status()
         return Image.open(BytesIO(response.content)).convert("RGBA")
 
-    def _draw_text_shadow(
-        self,
-        draw,
-        pos,
-        text,
-        font,
-        fill,
-    ):
+    def _draw_text_shadow(self, draw, pos, text, font, fill):
         x, y = pos
 
-        # Shadow layers (halo effect)
-        shadow_offsets = [
-            (-3, -3),
-            (-3, 0),
-            (-3, 3),
-            (0, -3),
-            (0, 3),
-            (3, -3),
-            (3, 0),
-            (3, 3),
-        ]
+        # single soft shadow
+        draw.text(
+            (x + 2, y + 2),
+            text,
+            font=font,
+            fill=(0, 0, 0, 120),
+        )
 
-        for ox, oy in shadow_offsets:
-            draw.text(
-                (x + ox, y + oy),
-                text,
-                font=font,
-                fill=(0, 0, 0, 200),  # strong dark shadow
-            )
-
-        # Main text
         draw.text(
             (x, y),
             text,
@@ -392,6 +373,6 @@ def _parse_embed_metadata(embed):
             elif any(rarity in line for rarity in rarities):
                 # Extrae símbolo entre paréntesis
                 if "(" in line and ")" in line:
-                    meta["rarity"] = line[line.find("(") + 1 : line.find(")")] # noqa
+                    meta["rarity"] = line[line.find("(") + 1 : line.find(")")]  # noqa
 
     return meta
