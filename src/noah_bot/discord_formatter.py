@@ -310,7 +310,7 @@ class DiscordImageRenderer:
                 text_h = bbox[3] - bbox[1]
 
                 lx = img_x + (img.width - text_w) // 2
-                ly = img_y + img.height - text_h - 20
+                ly = img_y + img.height - 90
 
                 draw.text(
                     (lx, ly),
