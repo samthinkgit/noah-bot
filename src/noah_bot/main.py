@@ -651,7 +651,7 @@ def main():
         await ctx.send(embed=embed)
 
     @waifu.command()
-    @with_loading(title="🗡️ Engaging in Waifu Combat...", duration=2.0, steps=20)
+    @with_loading(title="🗡️ Engaging in Waifu Combat...", duration=1.0, steps=20)
     async def attack(ctx, user: discord.Member):
         """
         .noah waifu attack @user
@@ -659,6 +659,7 @@ def main():
         d = waifu_manager.get_waifu(str(user.id))
         if not d:
             await ctx.send(f"❌ {user.display_name} doesn't have a waifu.")
+            return
 
         if d.is_incapacitated(d.now()):
             await ctx.send(f"❌ {user.display_name}'s waifu is incapacitated.")
