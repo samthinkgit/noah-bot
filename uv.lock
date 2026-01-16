@@ -796,6 +796,7 @@ dependencies = [
     { name = "langchain" },
     { name = "langchain-openai" },
     { name = "pillow" },
+    { name = "rich" },
     { name = "tinydb" },
 ]
 
@@ -811,6 +812,7 @@ requires-dist = [
     { name = "langchain", specifier = ">=1.2.3" },
     { name = "langchain-openai", specifier = ">=1.1.7" },
     { name = "pillow", specifier = ">=12.1.0" },
+    { name = "rich", specifier = ">=14.2.0" },
     { name = "tinydb", specifier = ">=4.8.2" },
 ]
 

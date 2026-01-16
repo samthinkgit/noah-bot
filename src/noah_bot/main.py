@@ -17,6 +17,7 @@ from noah_bot.discord_formatter import (
     EmbedTable,
     DiscordImageRenderer,
     with_delete_button,
+    with_loading,
     RARITY_COLORS,
     RARITY_SYMBOLS,
     RARITY_DISPLAY,
@@ -1358,6 +1359,7 @@ def main():
             await ctx.send(f"🧹 Cleared `{count}` waifus from your steal list.")
 
     @bot.command()
+    @with_loading("Generating test images...", duration=3)
     async def test_image(ctx):
         """
         .test_image

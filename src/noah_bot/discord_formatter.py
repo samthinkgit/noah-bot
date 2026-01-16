@@ -1,5 +1,6 @@
 from PIL import Image, ImageDraw, ImageFont
 import requests
+import asyncio
 from io import BytesIO
 from typing import List
 import json
@@ -7,6 +8,10 @@ from pathlib import Path
 from functools import wraps
 from typing import Optional
 import discord
+from rich.progress import Bar
+from rich.console import Console
+from rich.text import Text
+from io import StringIO
 
 
 RARITY_COLORS = {
@@ -40,6 +45,75 @@ RARITY_DISPLAY = {
     "zeta": "Zeta",
     "omega": "Omega",
 }
+
+
+# ======= Loading bar rendering =======
+def render_rich_bar(percent: int, width: int = 24) -> str:
+    """
+    Renders a Rich progress bar as a string for Discord.
+    """
+    buffer = StringIO()
+    console = Console(file=buffer, force_terminal=True, width=width + 10)
+
+    bar = Bar(
+        size=100,
+        completed=percent,
+        width=width,
+    )
+
+    console.print(Text.assemble(bar, f" {percent}%"))
+    return f"```{buffer.getvalue().strip()}```"
+
+
+def build_loading_embed(title: str, percent: int) -> discord.Embed:
+    embed = discord.Embed(
+        title=title,
+        description=render_rich_bar(percent),
+        color=discord.Color.blurple(),
+    )
+    embed.set_footer(text="Please wait...")
+    return embed
+
+
+def with_loading(title: str = "Loading...", duration: float = 3.0, steps: int = 25):
+    """
+    title: Embed title
+    duration: Total animation duration in seconds
+    steps: Smoothness of the animation
+    """
+
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(ctx, *args, **kwargs):
+            delay = duration / steps
+
+            # Initial message
+            message = await ctx.send(embed=build_loading_embed(title, 0))
+
+            for step in range(1, steps + 1):
+                percent = int(step * 100 / steps)
+                await asyncio.sleep(delay)
+
+                try:
+                    await message.edit(embed=build_loading_embed(title, percent))
+                except discord.NotFound:
+                    break
+
+            # Remove loading message
+            try:
+                await message.delete()
+            except discord.NotFound:
+                pass
+
+            # Execute real command
+            return await func(ctx, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+# ======= Delete button view =======
 
 
 class DeleteMessageView(discord.ui.View):
