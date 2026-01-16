@@ -1439,6 +1439,7 @@ def main():
         )
 
         await message.channel.send(embed=embed)
+        await bot.process_commands(message)
 
     # ---------------- RUN ---------------- #
 
