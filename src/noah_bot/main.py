@@ -659,7 +659,7 @@ def main():
         d = waifu_manager.get_waifu(str(user.id))
         if not d:
             await ctx.send(f"❌ {user.display_name} doesn't have a waifu.")
-            
+
         if d.is_incapacitated(d.now()):
             await ctx.send(f"❌ {user.display_name}'s waifu is incapacitated.")
             return
@@ -710,6 +710,9 @@ def main():
         embed = table.render()
         if w and w.image_url:
             embed.set_image(url=w.image_url)
+
+        if d and d.image_url:
+            embed.set_thumbnail(url=d.image_url)
 
         await ctx.send(embed=embed)
 
