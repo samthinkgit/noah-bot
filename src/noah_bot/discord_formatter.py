@@ -11,7 +11,6 @@ import discord
 from io import StringIO
 from rich.progress import Progress, BarColumn, TextColumn
 from rich.console import Console
-from io import StringIO
 
 
 RARITY_COLORS = {
@@ -48,28 +47,35 @@ RARITY_DISPLAY = {
 
 
 # ======= Loading bar rendering =======
-def render_rich_bar(percent: int, width: int = 24) -> str:
-    buffer = StringIO()
-    console = Console(file=buffer, force_terminal=True, width=width + 20)
+def render_colored_bar(percent: int, width: int = 24) -> str:
+    filled = int(width * percent / 100)
+    empty = width - filled
 
-    with Progress(
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        BarColumn(bar_width=width),
-        console=console,
-        transient=True,
-    ) as progress:
-        task = progress.add_task("", total=100)
-        progress.update(task, completed=percent)
+    bar = "█" * filled + "░" * empty
 
-    return f"```{buffer.getvalue().strip()}```"
+    if percent < 40:
+        lang = "diff"
+        content = f"- {bar} {percent}%"
+    elif percent < 80:
+        lang = "fix"
+        content = f"{bar} {percent}%"
+    else:
+        lang = "ini"
+        content = f"[{bar} {percent}%]"
+
+    return f"```{lang}\n{content}\n```"
+
+
+import discord
+
 
 def build_loading_embed(title: str, percent: int) -> discord.Embed:
     embed = discord.Embed(
         title=title,
-        description=render_rich_bar(percent),
+        description=render_colored_bar(percent),
         color=discord.Color.blurple(),
     )
-    embed.set_footer(text="Please wait...")
+    embed.set_footer(text="Processing...")
     return embed
 
 
