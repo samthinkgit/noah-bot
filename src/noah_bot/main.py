@@ -639,9 +639,9 @@ def main():
             else:
                 status = "✅"
 
-            sleep_available = "🛌" if w.can_sleep(w.now()) else ""
+            sleep_available = "🛌" if w.can_sleep(w.now()) else "🛏️"
             hp_text = f"{w.current_hp} / {w.max_hp()}"
-            table.add_row([f"`({hp_text:^10})` {name} [{status}{sleep_available}]"])
+            table.add_row([f"`({hp_text:^7})` {status}{sleep_available} {name}"])
 
         embed = table.render()
         await ctx.send(embed=embed)
