@@ -651,7 +651,7 @@ def main():
         await ctx.send(embed=embed)
 
     @waifu.command()
-    @with_loading(title="🗡️ Engaging in Waifu Combat...", duration=1.0, steps=20)
+    @with_loading(title="🗡️ Engaging in Waifu Combat...", duration=1.0, steps=15)
     async def attack(ctx, user: discord.Member):
         """
         .noah waifu attack @user
