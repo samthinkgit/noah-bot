@@ -651,6 +651,7 @@ def main():
         await ctx.send(embed=embed)
 
     @waifu.command()
+    @with_loading(title="🗡️ Engaging in Waifu Combat...", duration=3.0, steps=25)
     async def attack(ctx, user: discord.Member):
         """
         .noah waifu attack @user
@@ -1359,7 +1360,6 @@ def main():
             await ctx.send(f"🧹 Cleared `{count}` waifus from your steal list.")
 
     @bot.command()
-    @with_loading("Generating test images...", duration=3)
     async def test_image(ctx):
         """
         .test_image

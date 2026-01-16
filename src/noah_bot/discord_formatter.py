@@ -66,16 +66,12 @@ def render_colored_bar(percent: int, width: int = 24) -> str:
     return f"```{lang}\n{content}\n```"
 
 
-import discord
-
-
 def build_loading_embed(title: str, percent: int) -> discord.Embed:
     embed = discord.Embed(
         title=title,
         description=render_colored_bar(percent),
         color=discord.Color.blurple(),
     )
-    embed.set_footer(text="Processing...")
     return embed
 
 
