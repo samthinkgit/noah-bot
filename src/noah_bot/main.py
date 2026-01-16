@@ -640,7 +640,7 @@ def main():
                 status = "✅ Active"
 
             hp_text = f"{w.current_hp} / {w.max_hp()}"
-            table.add_row([f"({hp_text}) {name}: {status}"])
+            table.add_row([f"({hp_text})\t{name}:\t {status}"])
 
         embed = table.render()
         await ctx.send(embed=embed)
