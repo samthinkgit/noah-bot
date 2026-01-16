@@ -633,15 +633,15 @@ def main():
                 continue
 
             if w.incapacitated_until and w.incapacitated_until.timestamp() > now:
-                status = "🩸 Incapacitated"
+                status = "🩸"
             elif w.stunned_until and w.stunned_until.timestamp() > now:
-                status = "😵 Stunned"
+                status = "😵"
             else:
-                status = "✅ Active"
+                status = "✅"
 
-            sleep_available = "[🛌]" if w.can_sleep(w.now()) else "[ ]"
+            sleep_available = "🛌" if w.can_sleep(w.now()) else ""
             hp_text = f"{w.current_hp} / {w.max_hp()}"
-            table.add_row([f"{sleep_available}\t ({hp_text})\t{name}:\t {status}"])
+            table.add_row([f"{hp_text:^7} {name} [{status}]{sleep_available}"])
 
         embed = table.render()
         await ctx.send(embed=embed)
