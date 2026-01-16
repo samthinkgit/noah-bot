@@ -1416,6 +1416,7 @@ def main():
     async def on_message(message: discord.Message):
         # Ignore self messages
         if message.author.bot is False:
+            await bot.process_commands(message)
             return
 
         match = CLAIM_REGEX.search(message.content)
