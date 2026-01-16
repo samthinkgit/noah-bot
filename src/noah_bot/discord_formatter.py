@@ -8,9 +8,6 @@ from pathlib import Path
 from functools import wraps
 from typing import Optional
 import discord
-from io import StringIO
-from rich.progress import Progress, BarColumn, TextColumn
-from rich.console import Console
 
 
 RARITY_COLORS = {
@@ -44,6 +41,39 @@ RARITY_DISPLAY = {
     "zeta": "Zeta",
     "omega": "Omega",
 }
+
+
+class WaifuClaimFormatter:
+    @staticmethod
+    def build_embed(
+        user: discord.Member | discord.User,
+        waifu_name: str,
+        rarity_symbol: str,
+    ) -> discord.Embed:
+        """
+        Builds a 'Waifu Claimed' embed.
+
+        :param user: User who claimed the waifu
+        :param waifu_name: Name of the claimed waifu
+        :param rarity_symbol: Rarity symbol (e.g. δ, ★, S)
+        """
+
+        embed = discord.Embed(
+            title="💖 Waifu Claimed!",
+            description=(
+                f"🎉 **Congrats {user.mention}!**\n\n"
+                f"You were the **fastest** to claim **[{rarity_symbol}] {waifu_name}**.\n"
+                f"Speed, reflexes, and pure determination 😤🔥"
+            ),
+            color=discord.Color.pink(),
+        )
+
+        # User avatar as thumbnail
+        embed.set_thumbnail(url=user.display_avatar.url)
+
+        embed.set_footer(text="Only one can be the fastest 💨")
+
+        return embed
 
 
 # ======= Loading bar rendering =======

@@ -18,6 +18,7 @@ from noah_bot.discord_formatter import (
     DiscordImageRenderer,
     with_delete_button,
     with_loading,
+    WaifuClaimFormatter,
     RARITY_COLORS,
     RARITY_SYMBOLS,
     RARITY_DISPLAY,
@@ -27,6 +28,11 @@ from noah_bot.waifu_game import WaifuGameManager, Waifu
 
 from noah_bot.leaderboard import Leaderboard, generate_date
 from noah_bot.steallist import StealList
+
+CLAIM_REGEX = re.compile(
+    r"Congrats,\s+(<@!?\d+>|@.+?)\s+you claimed a\s+\[(.*?)\]\s+(.*?)!",
+    re.IGNORECASE,
+)
 
 
 def main():
@@ -1403,6 +1409,36 @@ def main():
 
         for i, embed in enumerate(replied_msg.embeds, start=1):
             inspect(embed)
+
+    # ---------------- CLAIM DETECTION ---------------- #
+
+    @bot.event
+    async def on_message(message: discord.Message):
+        # Ignore self messages
+        if message.author.bot is False:
+            return
+
+        match = CLAIM_REGEX.search(message.content)
+        if not match:
+            return
+
+        raw_user, rarity_symbol, waifu_name = match.groups()
+
+        # Try to resolve mentioned user
+        user = None
+        if message.mentions:
+            user = message.mentions[0]
+
+        if not user:
+            return  # Cannot build a proper embed without user
+
+        embed = WaifuClaimFormatter.build_embed(
+            user=user,
+            waifu_name=waifu_name,
+            rarity_symbol=rarity_symbol,
+        )
+
+        await message.channel.send(embed=embed)
 
     # ---------------- RUN ---------------- #
 
