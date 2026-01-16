@@ -59,7 +59,7 @@ class WaifuClaimFormatter:
         """
 
         embed = discord.Embed(
-            title=f"🎉 **Congrats {user.mention}!**",
+            title=f"🎉 **Congrats **{user.mention}**!**",
             description=(
                 "The waifu has been claimed!\n"
                 + f"You were the **fastest** to guess **[{rarity_symbol}] {waifu_name}** name.\n"
