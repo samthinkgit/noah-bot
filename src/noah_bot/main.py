@@ -1434,15 +1434,6 @@ def main():
         if not user:
             return  # Cannot build a proper embed without user
 
-        # 🚮 Delete original claim message
-        try:
-            await message.delete()
-        except discord.Forbidden:
-            pass  # Missing permissions
-        except discord.NotFound:
-            pass  # Already deleted
-
-
         embed = WaifuClaimFormatter.build_embed(
             user=user,
             waifu_name=waifu_name,
@@ -1450,6 +1441,14 @@ def main():
         )
 
         await message.channel.send(embed=embed)
+
+        # 🚮 Delete original claim message
+        try:
+            await message.delete()
+        except discord.Forbidden:
+            pass  # Missing permissions
+        except discord.NotFound:
+            pass  # Already deleted
 
     # ---------------- RUN ---------------- #
 
