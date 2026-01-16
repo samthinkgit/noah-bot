@@ -1420,6 +1420,7 @@ def main():
 
         match = CLAIM_REGEX.search(message.content)
         if not match:
+            await bot.process_commands(message)
             return
 
         raw_user, rarity_symbol, waifu_name = match.groups()
@@ -1439,7 +1440,6 @@ def main():
         )
 
         await message.channel.send(embed=embed)
-        await bot.process_commands(message)
 
     # ---------------- RUN ---------------- #
 
