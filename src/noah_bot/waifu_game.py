@@ -135,6 +135,7 @@ class WaifuGameManager:
             "schema_version": SCHEMA_VERSION,
             "devmode": False,
             "users": {},
+            "players": [],
         }
         self._load()
 
@@ -146,6 +147,9 @@ class WaifuGameManager:
             return
         with open(self.json_path, "r", encoding="utf-8") as f:
             self._state = json.load(f)
+        # Backwards compatibility: older files may not have "players" key
+        if "players" not in self._state:
+            self._state["players"] = []
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.json_path) or ".", exist_ok=True)
@@ -177,6 +181,15 @@ class WaifuGameManager:
         if not raw:
             return None
         return self._deserialize_waifu(raw)
+
+    def set_players(self, player_ids):
+        """Set the list of tracked player IDs (as strings)."""
+        self._state["players"] = [str(pid) for pid in player_ids]
+        self._save()
+
+    def get_players(self):
+        """Return the list of tracked player IDs (strings)."""
+        return list(self._state.get("players", []))
 
     # ---------- Core Actions ---------- #
 

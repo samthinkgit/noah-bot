@@ -20,7 +20,7 @@ from noah_bot.discord_formatter import (
     RARITY_SYMBOLS,
     RARITY_DISPLAY,
 )
-from noah_bot.waifu_game import WaifuGameManager, Waifu, PEACEFUL_INCAP_SECONDS
+from noah_bot.waifu_game import WaifuGameManager, Waifu
 
 
 from noah_bot.leaderboard import Leaderboard, generate_date
@@ -585,6 +585,66 @@ def main():
         table.add_row([f"Special Name: {w['special_name']}"])
 
         await ctx.send(embed=table.render())
+
+    @waifu.command()
+    async def setplayers(ctx, players: commands.Greedy[discord.Member]):
+        """.noah waifu setplayers <@user1> <@user2> ...
+        Guarda en el JSON la lista de jugadores a monitorizar.
+        """
+
+        if not players:
+            await ctx.send("❌ Debes mencionar al menos un usuario.")
+            return
+
+        player_ids = [str(m.id) for m in players]
+        waifu_manager.set_players(player_ids)
+
+        mentions = ", ".join(m.mention for m in players)
+        await ctx.send(f"✅ Jugadores configurados para el reporte: {mentions}")
+
+    @waifu.command()
+    async def playerreport(ctx):
+        """.noah waifu playerreport
+        Muestra la vida y estado (stunned/incapacitated) de los jugadores configurados.
+        """
+
+        player_ids = waifu_manager.get_players()
+        if not player_ids:
+            await ctx.send(
+                "❌ No hay jugadores configurados. Usa `.noah waifu setplayers <@user1> <@user2> ...`."
+            )
+            return
+
+        now = time.time()
+
+        table = EmbedTable(
+            headers=["Player", "HP", "Status"],
+            title="📋 Waifu Player Report",
+            color=discord.Color.blurple(),
+        )
+
+        for pid in player_ids:
+            member = ctx.guild.get_member(int(pid)) if ctx.guild else None
+            name = member.display_name if member else f"ID {pid}"
+            display = member.mention if member else name
+
+            w = waifu_manager.get_waifu(str(pid))
+            if not w:
+                table.add_row([display, "-", "❌ No tiene waifu"])
+                continue
+
+            if w.incapacitated_until and w.incapacitated_until.timestamp() > now:
+                status = "🩸 Incapacitated"
+            elif w.stunned_until and w.stunned_until.timestamp() > now:
+                status = "😵 Stunned"
+            else:
+                status = "✅ OK"
+
+            hp_text = f"{w.current_hp} / {w.max_hp()}"
+            table.add_row([display, hp_text, status])
+
+        embed = table.render()
+        await ctx.send(embed=embed)
 
     @waifu.command()
     async def attack(ctx, user: discord.Member):
@@ -1187,6 +1247,7 @@ def main():
         chart = EmbedTable(headers=["Command"], title="Waifu Game Commands")
         chart.add_row([".noah waifu set <name> -special <special name>"])
         chart.add_row([".noah waifu attack @user"])
+        chart.add_row([".noah waifu playerreport"])
         chart.add_row([".noah waifu status -user @user"])
         chart.add_row([".noah waifu remaining -user @user"])
         chart.add_row([".noah waifu sleep"])
@@ -1197,6 +1258,7 @@ def main():
         chart.add_row([".noah waifu setimage"])
         chart.add_row([".noah waifu setcolor <hex | random | reset>"])
         chart.add_row([".noah waifu attackedby -user @user"])
+        chart.add_row(["[admin] .noah waifu setplayers <@user1> <@user2> ..."])
         await ctx.send(embed=chart.render())
 
     # ---------------- DEBUG HISTORY ---------------- #
