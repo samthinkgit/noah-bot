@@ -618,19 +618,18 @@ def main():
         now = time.time()
 
         table = EmbedTable(
-            headers=["Player", "HP", "Status"],
+            headers=["Player"],
             title="📋 Waifu Player Report",
             color=discord.Color.blurple(),
         )
 
         for pid in player_ids:
-            member = ctx.guild.get_member(int(pid)) if ctx.guild else None
-            name = member.display_name if member else f"ID {pid}"
-            display = member.mention if member else name
+            member = ctx.guild.get_member(int(pid))
+            name = member.mention if member else f"<@{pid}>"
 
             w = waifu_manager.get_waifu(str(pid))
             if not w:
-                table.add_row([display, "-", "❌ No tiene waifu"])
+                table.add_row([name, "-", "❌ No tiene waifu"])
                 continue
 
             if w.incapacitated_until and w.incapacitated_until.timestamp() > now:
@@ -638,10 +637,10 @@ def main():
             elif w.stunned_until and w.stunned_until.timestamp() > now:
                 status = "😵 Stunned"
             else:
-                status = "✅ OK"
+                status = "✅ Active"
 
             hp_text = f"{w.current_hp} / {w.max_hp()}"
-            table.add_row([display, hp_text, status])
+            table.add_row([f"({hp_text}) {name}: {status}"])
 
         embed = table.render()
         await ctx.send(embed=embed)
