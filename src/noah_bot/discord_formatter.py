@@ -59,11 +59,9 @@ class WaifuClaimFormatter:
         """
 
         embed = discord.Embed(
-            title="💖 Waifu Claimed!",
+            title=f"🎉 **Congrats {user.mention}!**",
             description=(
-                f"🎉 **Congrats {user.mention}!**\n\n"
                 f"You were the **fastest** to claim **[{rarity_symbol}] {waifu_name}**.\n"
-                f"Speed, reflexes, and pure determination 😤🔥"
             ),
             color=discord.Color.pink(),
         )
