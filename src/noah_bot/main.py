@@ -16,6 +16,7 @@ from noah_bot.discord_formatter import (
     UserEmojiManager,
     EmbedTable,
     DiscordImageRenderer,
+    with_delete_button,
     RARITY_COLORS,
     RARITY_SYMBOLS,
     RARITY_DISPLAY,
@@ -708,6 +709,7 @@ def main():
         await ctx.send(embed=embed)
 
     @waifu.command(aliases=["rem"])
+    @with_delete_button()
     async def remaining(ctx, *, args: str = ""):
         """
         .noah waifu remaining
@@ -830,6 +832,7 @@ def main():
         await ctx.send(embed=embed)
 
     @waifu.command()
+    @with_delete_button()
     async def status(ctx, *, args: str = ""):
         """
         .noah waifu status
@@ -939,6 +942,7 @@ def main():
         await ctx.send("✨ Your waifu has recovered and is active again!")
 
     @waifu.command()
+    @with_delete_button()
     async def stats(ctx, *, args: str = ""):
         """
         .noah waifu stats
@@ -1116,6 +1120,7 @@ def main():
         await ctx.send(embed=embed)
 
     @waifu.command()
+    @with_delete_button()
     async def attackedby(ctx, *, args: str = ""):
         """
         .noah waifu attackedby

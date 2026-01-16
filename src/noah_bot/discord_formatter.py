@@ -4,6 +4,7 @@ from io import BytesIO
 from typing import List
 import json
 from pathlib import Path
+from functools import wraps
 from typing import Optional
 import discord
 
@@ -39,6 +40,63 @@ RARITY_DISPLAY = {
     "zeta": "Zeta",
     "omega": "Omega",
 }
+
+
+class DeleteMessageView(discord.ui.View):
+    def __init__(
+        self, author_id: int, command_message: discord.Message, timeout: int = 120
+    ):
+        super().__init__(timeout=timeout)
+        self.author_id = author_id
+        self.command_message = command_message
+
+    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
+    async def delete_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        # Only allow the command author to delete
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message(
+                "You can't delete this message.",
+                ephemeral=True,
+            )
+            return
+
+        # Delete bot message
+        try:
+            await interaction.message.delete()
+        except discord.NotFound:
+            pass
+
+        # Delete command message
+        try:
+            await self.command_message.delete()
+        except discord.NotFound:
+            pass
+
+
+def with_delete_button():
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(ctx, *args, **kwargs):
+            original_send = ctx.send
+
+            async def send_with_button(*send_args, **send_kwargs):
+                view = DeleteMessageView(
+                    author_id=ctx.author.id,
+                    command_message=ctx.message,
+                )
+                send_kwargs["view"] = view
+                return await original_send(*send_args, **send_kwargs)
+
+            ctx.send = send_with_button
+            return await func(ctx, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 class EmbedTable:
