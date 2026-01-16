@@ -638,9 +638,10 @@ def main():
                 status = "😵 Stunned"
             else:
                 status = "✅ Active"
-
+            
+            sleep_available = "[🛌]" if waifu_manager.can_sleep(str(pid)) else "[ ]"
             hp_text = f"{w.current_hp} / {w.max_hp()}"
-            table.add_row([f"({hp_text})\t{name}:\t {status}"])
+            table.add_row([f"{sleep_available}\t ({hp_text})\t{name}:\t {status}"])
 
         embed = table.render()
         await ctx.send(embed=embed)
