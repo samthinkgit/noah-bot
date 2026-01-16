@@ -111,6 +111,10 @@ class Waifu:
             self.incapacitated_until = None
             self.heal_full()
 
+    def can_sleep(self, now: datetime) -> bool:
+        today = now.date().isoformat()
+        return self.last_sleep_date != today
+
     def level(self) -> int:
         return (
             self.stats.health
