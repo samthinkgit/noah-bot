@@ -8,9 +8,9 @@ from pathlib import Path
 from functools import wraps
 from typing import Optional
 import discord
-from rich.progress import Bar
+from io import StringIO
+from rich.progress import Progress, BarColumn, TextColumn
 from rich.console import Console
-from rich.text import Text
 from io import StringIO
 
 
@@ -49,21 +49,19 @@ RARITY_DISPLAY = {
 
 # ======= Loading bar rendering =======
 def render_rich_bar(percent: int, width: int = 24) -> str:
-    """
-    Renders a Rich progress bar as a string for Discord.
-    """
     buffer = StringIO()
-    console = Console(file=buffer, force_terminal=True, width=width + 10)
+    console = Console(file=buffer, force_terminal=True, width=width + 20)
 
-    bar = Bar(
-        size=100,
-        completed=percent,
-        width=width,
-    )
+    with Progress(
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        BarColumn(bar_width=width),
+        console=console,
+        transient=True,
+    ) as progress:
+        task = progress.add_task("", total=100)
+        progress.update(task, completed=percent)
 
-    console.print(Text.assemble(bar, f" {percent}%"))
     return f"```{buffer.getvalue().strip()}```"
-
 
 def build_loading_embed(title: str, percent: int) -> discord.Embed:
     embed = discord.Embed(
