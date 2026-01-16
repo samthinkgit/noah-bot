@@ -61,16 +61,14 @@ class WaifuClaimFormatter:
         embed = discord.Embed(
             title=f"🎉 **Congrats {user.mention}!**",
             description=(
-                f"You were the **fastest** to claim **[{rarity_symbol}] {waifu_name}**.\n"
+                "The waifu has been claimed!\n"
+                + f"You were the **fastest** to guess **[{rarity_symbol}] {waifu_name}** name.\n"
             ),
             color=discord.Color.pink(),
         )
 
         # User avatar as thumbnail
         embed.set_thumbnail(url=user.display_avatar.url)
-
-        embed.set_footer(text="Only one can be the fastest 💨")
-
         return embed
 
 
