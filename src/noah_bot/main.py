@@ -611,7 +611,7 @@ def main():
         await ctx.send(f"✅ Jugadores configurados para el reporte: {mentions}")
 
     @waifu.command()
-    async def playerreport(ctx):
+    async def report(ctx):
         """.noah waifu playerreport
         Muestra la vida y estado (stunned/incapacitated) de los jugadores configurados.
         """
@@ -1269,7 +1269,7 @@ def main():
         chart = EmbedTable(headers=["Command"], title="Waifu Game Commands")
         chart.add_row([".noah waifu set <name> -special <special name>"])
         chart.add_row([".noah waifu attack @user"])
-        chart.add_row([".noah waifu playerreport"])
+        chart.add_row([".noah waifu report"])
         chart.add_row([".noah waifu status -user @user"])
         chart.add_row([".noah waifu remaining -user @user"])
         chart.add_row([".noah waifu sleep"])
