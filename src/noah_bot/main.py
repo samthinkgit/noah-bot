@@ -1450,6 +1450,7 @@ def main():
         chart.add_row([".noah waifu daily <stat>"])
         chart.add_row([".noah waifu alive"])
         chart.add_row([".noah waifu setimage"])
+        chart.add_row([".noah waifu dojo"])
         chart.add_row([".noah waifu setcolor <hex | random | reset>"])
         chart.add_row([".noah waifu attackedby -user @user"])
         chart.add_row(["[admin] .noah waifu setplayers <@user1> <@user2> ..."])
