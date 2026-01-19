@@ -235,7 +235,7 @@ class EmbedTable:
         )
 
         if not self.rows:
-            embed.description = (embed.description or "") + "\n\n_No data available._"
+            embed.description = (embed.description or "")
             return embed
 
         # Convert rows → columns

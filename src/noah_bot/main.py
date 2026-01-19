@@ -1420,17 +1420,16 @@ def main():
 
         if selected_lines:
             embed.add_field(
-                name="Jugadores seleccionados",
+                name="Players selected",
                 value=", ".join(selected_lines),
                 inline=False,
             )
 
         embed.add_field(
-            name="Cómo funciona",
+            name="How it works",
             value=(
-                "Los jugadores seleccionados pueden usar `.noah waifu dojo` para "
-                "empezar a entrenar. Tras **30 minutos** de carga obtendrán "
-                "**3 niveles aleatorios** (levelups pendientes)."
+                "Selected players can use `.noah waifu dojo` to start training. After **30 minutes** of charging, they will receive " # noqa
+                "**3 random levels** (pending levelups)."
             ),
             inline=False,
         )
