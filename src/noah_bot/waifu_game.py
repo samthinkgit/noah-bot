@@ -10,6 +10,7 @@ SCHEMA_VERSION = 2
 INCAP_SECONDS = 12 * 60 * 60  # 12h incapacitated
 STUN_SECONDS = 3 * 60 * 60  # 3h stun
 PEACEFUL_INCAP_SECONDS = 365 * 24 * 60 * 60  # 1 year
+DOJO_CHARGE_SECONDS = 30 * 60  # 30 minutes of training
 
 
 def _utc_now() -> datetime:
@@ -140,6 +141,8 @@ class WaifuGameManager:
             "devmode": False,
             "users": {},
             "players": [],
+            "dojo": None,
+            "next_dojo_at": None,
         }
         self._load()
 
@@ -154,6 +157,10 @@ class WaifuGameManager:
         # Backwards compatibility: older files may not have "players" key
         if "players" not in self._state:
             self._state["players"] = []
+        if "dojo" not in self._state:
+            self._state["dojo"] = None
+        if "next_dojo_at" not in self._state:
+            self._state["next_dojo_at"] = None
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.json_path) or ".", exist_ok=True)
@@ -194,6 +201,284 @@ class WaifuGameManager:
     def get_players(self):
         """Return the list of tracked player IDs (strings)."""
         return list(self._state.get("players", []))
+
+    # ---------- Dojo helpers ---------- #
+
+    @property
+    def dojo(self) -> Optional[Dict[str, Any]]:
+        return self._state.get("dojo")
+
+    def _set_dojo(self, dojo: Optional[Dict[str, Any]]) -> None:
+        self._state["dojo"] = dojo
+        self._save()
+
+    def _random_next_dojo_time(self, now: Optional[datetime] = None) -> datetime:
+        now = now or _utc_now()
+        hours = self.rng.randint(10, 20)
+        return now + timedelta(hours=hours)
+
+    def _weighted_sample_two_players(self, now: Optional[datetime] = None):
+        """Return up to two player IDs (strings) weighted by inverse level.
+
+        Lower-level waifus have higher probability of being selected.
+        Only players with an existing waifu are considered.
+        """
+
+        now = now or _utc_now()
+        players = self.get_players()
+        candidates = []  # list of (user_id, weight)
+
+        for pid in players:
+            w = self.get_waifu(str(pid))
+            if not w:
+                continue
+            level = max(1, w.level())
+            # Simple inverse weighting: lower level -> higher weight
+            weight = 1.0 / float(level)
+            candidates.append((str(pid), weight))
+
+        if len(candidates) < 2:
+            return []
+
+        def _weighted_choice(items):
+            total = sum(w for _, w in items)
+            r = self.rng.random() * total
+            upto = 0.0
+            for uid, w in items:
+                upto += w
+                if upto >= r:
+                    return uid
+            # Fallback
+            return items[-1][0]
+
+        first = _weighted_choice(candidates)
+        remaining = [(uid, w) for uid, w in candidates if uid != first]
+        if not remaining:
+            return [first]
+        second = _weighted_choice(remaining)
+        return [first, second]
+
+    def _ensure_dojo(self, now: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
+        """Ensure there is an active dojo, spawning one if time has come.
+
+        Returns the active dojo dict or None if none can be created.
+        """
+
+        now = now or _utc_now()
+
+        if self.dojo is not None:
+            return self.dojo
+
+        next_at_raw = self._state.get("next_dojo_at")
+        next_at = _from_iso(next_at_raw) if next_at_raw else None
+
+        if next_at is not None and now < next_at:
+            return None
+
+        # Time to spawn a new dojo
+        result = self.spawn_dojo(force=False, now=now)
+        if result.get("ok"):
+            return result["dojo"]
+        return None
+
+    def spawn_dojo(
+        self, force: bool = False, now: Optional[datetime] = None
+    ) -> Dict[str, Any]:
+        """Spawn a new dojo and select two players.
+
+        If force is False and there is already an active dojo, it will fail.
+        """
+
+        now = now or _utc_now()
+
+        if self.dojo is not None and not force:
+            return {"ok": False, "message": "There is already an active dojo."}
+
+        selected_players = self._weighted_sample_two_players(now=now)
+        if len(selected_players) < 2:
+            # Schedule the next attempt even if we failed to create one
+            self._state["next_dojo_at"] = _to_iso(self._random_next_dojo_time(now))
+            self._save()
+            return {
+                "ok": False,
+                "message": "Not enough eligible players to spawn a dojo.",
+            }
+
+        # Placeholder dojo definitions; fill with real names and images externally
+        dojo_templates = [
+            {
+                "id": 0,
+                "name": "Eternal Waifu Dojo",
+                "image_url": "https://welcome.materiacore.com/wp-content/uploads/2026/01/dojo1.jpeg",
+            },
+            {
+                "id": 1,
+                "name": "Phantom Waifu Dojo",
+                "image_url": "https://welcome.materiacore.com/wp-content/uploads/2026/01/replicate-prediction-jy70t2acdsrmr0cvtw9arezw6c.jpeg",
+            },
+            {
+                "id": 2,
+                "name": "Waifu Battle Room",
+                "image_url": "https://welcome.materiacore.com/wp-content/uploads/2026/01/dojo3.jpeg",
+            },
+            {
+                "id": 3,
+                "name": "Celestial Waifu Dojo",
+                "image_url": "https://welcome.materiacore.com/wp-content/uploads/2026/01/dojo4.jpeg",
+            },
+            {
+                "id": 4,
+                "name": "Shadow Waifu Dojo",
+                "image_url": "https://welcome.materiacore.com/wp-content/uploads/2026/01/dojo5.jpeg",
+            },
+            {
+                "id": 5,
+                "name": "Weightless Waifu Dojo",
+                "image_url": "https://welcome.materiacore.com/wp-content/uploads/2026/01/dojo6.jpeg",
+            },
+            {
+                "id": 6,
+                "name": "Arcane Dojo",
+                "image_url": "https://welcome.materiacore.com/wp-content/uploads/2026/01/dojo7.jpeg",
+            },
+            {
+                "id": 7,
+                "name": "The First Flame Dojo",
+                "image_url": "https://welcome.materiacore.com/wp-content/uploads/2026/01/dojo8.jpeg",
+            },
+            {
+                "id": 8,
+                "name": "Lightning Dojo",
+                "image_url": "https://welcome.materiacore.com/wp-content/uploads/2026/01/dojo9.jpeg",
+            },
+            {
+                "id": 9,
+                "name": "Montadito's VII Dojo",
+                "image_url": "https://welcome.materiacore.com/wp-content/uploads/2026/01/dojo10.jpeg",
+            },
+        ]
+        template = self.rng.choice(dojo_templates)
+
+        dojo = {
+            "id": template["id"],
+            "name": template["name"],
+            "image_url": template.get("image_url"),
+            "spawned_at": _to_iso(now),
+            "selected_players": selected_players,
+            "training": {
+                uid: {"started_at": None, "completed": False}
+                for uid in selected_players
+            },
+        }
+
+        self._state["dojo"] = dojo
+        self._state["next_dojo_at"] = _to_iso(self._random_next_dojo_time(now))
+        self._save()
+
+        return {"ok": True, "dojo": dojo}
+
+    def dojo_training_action(
+        self, user_id: str, now: Optional[datetime] = None
+    ) -> Dict[str, Any]:
+        """Start/continue/finish dojo training for a given user.
+
+        Returns a dict with a small "code" describing the state.
+        """
+
+        now = now or _utc_now()
+        dojo = self._ensure_dojo(now=now)
+
+        if dojo is None:
+            return {"ok": False, "code": "no_dojo", "message": "No active dojo."}
+
+        uid = str(user_id)
+        if uid not in dojo.get("selected_players", []):
+            return {
+                "ok": False,
+                "code": "not_selected",
+                "message": "You were not selected for this dojo.",
+                "dojo": dojo,
+            }
+
+        training = dojo["training"].get(uid)
+        if training is None:
+            return {
+                "ok": False,
+                "code": "internal_error",
+                "message": "No training slot found for this user.",
+            }
+
+        if training.get("completed"):
+            return {
+                "ok": False,
+                "code": "already_completed",
+                "message": "You already finished your dojo training.",
+                "dojo": dojo,
+            }
+
+        if training.get("started_at") is None:
+            training["started_at"] = _to_iso(now)
+            self._save()
+            return {
+                "ok": True,
+                "code": "started",
+                "message": "Dojo training started.",
+                "remaining_seconds": DOJO_CHARGE_SECONDS,
+                "dojo": dojo,
+            }
+
+        started_at = _from_iso(training["started_at"])
+        if not started_at:
+            training["started_at"] = _to_iso(now)
+            self._save()
+            return {
+                "ok": True,
+                "code": "started",
+                "message": "Dojo training started.",
+                "remaining_seconds": DOJO_CHARGE_SECONDS,
+                "dojo": dojo,
+            }
+
+        elapsed = (now - started_at).total_seconds()
+        if elapsed < DOJO_CHARGE_SECONDS:
+            remaining = int(DOJO_CHARGE_SECONDS - elapsed)
+            return {
+                "ok": True,
+                "code": "charging",
+                "message": "Dojo training in progress.",
+                "remaining_seconds": remaining,
+                "dojo": dojo,
+            }
+
+        # Training complete: grant 3 pending levelups
+        w = self.get_waifu(uid)
+        if not w:
+            return {
+                "ok": False,
+                "code": "no_waifu",
+                "message": "No waifu found for this user.",
+                "dojo": dojo,
+            }
+
+        w.pending_levelups += 3
+        training["completed"] = True
+
+        self._state["users"][uid] = self._serialize_waifu(w)
+
+        # If all selected players are done, close the dojo
+        if all(t["completed"] for t in dojo["training"].values()):
+            self._state["dojo"] = None
+
+        self._save()
+
+        return {
+            "ok": True,
+            "code": "completed",
+            "message": "Dojo training completed.",
+            "gained_levelups": 3,
+            "dojo": dojo,
+            "pending_levelups": w.pending_levelups,
+        }
 
     # ---------- Core Actions ---------- #
 

@@ -23,7 +23,7 @@ from noah_bot.discord_formatter import (
     RARITY_SYMBOLS,
     RARITY_DISPLAY,
 )
-from noah_bot.waifu_game import WaifuGameManager, Waifu
+from noah_bot.waifu_game import WaifuGameManager, Waifu, DOJO_CHARGE_SECONDS
 
 
 from noah_bot.leaderboard import Leaderboard, generate_date
@@ -1059,6 +1059,128 @@ def main():
         await ctx.send("🖼️ Waifu image set successfully!")
 
     @waifu.command()
+    async def dojo(ctx):
+        """.noah waifu dojo
+        Train your waifu in the dojo to gain random level-ups.
+        """
+
+        w = waifu_manager.get_waifu(str(ctx.author.id))
+        if not w:
+            await ctx.send("❌ You don't have a waifu.")
+            return
+
+        # Solo jugadores configurados con setplayers pueden usar el dojo
+        if str(ctx.author.id) not in waifu_manager.get_players():
+            await ctx.send(
+                "❌ Only players in the player set can use the dojo."
+            )
+            return
+
+        result = waifu_manager.dojo_training_action(str(ctx.author.id))
+
+        dojo = result.get("dojo") or waifu_manager.dojo
+        if not dojo:
+            await ctx.send("⛩️ There is no active dojo right now.")
+            return
+
+        # Construimos el embed del dojo (nombre, imagen, jugadores seleccionados)
+        embed = EmbedTable(
+            headers=["Info"],
+            title=f"⛩️ {dojo.get('name', 'Mysterious Dojo')}",
+            color=(
+                discord.Color(w.embed_color)
+                if w.embed_color
+                else discord.Color.blurple()
+            ),
+        ).render()
+
+        # Imagen del dojo, si existe
+        if dojo.get("image_url"):
+            embed.set_image(url=dojo["image_url"])
+
+        # List of selected players
+        selected_lines = []
+        for uid in dojo.get("selected_players", []):
+            member = ctx.guild.get_member(int(uid))
+            name = member.mention if member else f"<@{uid}>"
+            selected_lines.append(name)
+
+        if selected_lines:
+            embed.add_field(
+                name="Selected players",
+                value=", ".join(selected_lines),
+                inline=False,
+            )
+
+        code = result.get("code")
+
+        if not result.get("ok"):
+            if code == "no_dojo":
+                await ctx.send("⛩️ There is no active dojo right now.")
+                return
+            if code == "not_selected":
+                embed.add_field(
+                    name="Status",
+                    value=(
+                        "This dojo is active, but **you were not selected**. "
+                        "Selection favors lower-level players."
+                    ),
+                    inline=False,
+                )
+                await ctx.send(embed=embed)
+                return
+            if code == "already_completed":
+                embed.add_field(
+                    name="Status",
+                    value="You have already completed your training in this dojo.",
+                    inline=False,
+                )
+                await ctx.send(embed=embed)
+                return
+
+            await ctx.send("❌ Could not use the dojo at this time.")
+            return
+
+        if code == "started":
+            minutes = DOJO_CHARGE_SECONDS // 60
+            embed.add_field(
+                name="Training started",
+                value=(
+                    f"You have started charging energy in the dojo. "
+                    f"Come back in **{minutes} minutes** and use `.noah waifu dojo` again "
+                    "to claim your reward."
+                ),
+                inline=False,
+            )
+        elif code == "charging":
+            remaining = int(result.get("remaining_seconds", 0))
+            mins = remaining // 60
+            secs = remaining % 60
+            embed.add_field(
+                name="Charging...",
+                value=f"You still have **{mins}m {secs}s** of training left.",
+                inline=False,
+            )
+        elif code == "completed":
+            gained = result.get("gained_levelups", 3)
+            pending = result.get("pending_levelups")
+            extra = (
+                f" You now have **{pending}** pending levelups."
+                if pending is not None
+                else ""
+            )
+            embed.add_field(
+                name="Training completed",
+                value=(
+                    f"You have completed **30 minutes** of dojo training and gained "
+                    f"**{gained} random levels** (pending levelups)." + extra
+                ),
+                inline=False,
+            )
+
+        await ctx.send(embed=embed)
+
+    @waifu.command()
     async def daily(ctx, stat: str = None):
         """
         .noah waifu daily [stat]
@@ -1261,6 +1383,57 @@ def main():
 
         if w and w.embed_color is not None:
             embed.color = w.embed_color
+
+        await ctx.send(embed=embed)
+
+    @waifu.command()
+    async def forcedojo(ctx):
+        """[admin] .noah waifu forcedojo
+        Fuerza la aparición de un dojo y anuncia a los jugadores elegidos.
+        """
+
+        if not ctx.author.guild_permissions.administrator:
+            await ctx.send("❌ Solo un administrador puede usar este comando.")
+            return
+
+        result = waifu_manager.spawn_dojo(force=True)
+        if not result.get("ok"):
+            await ctx.send(f"❌ {result.get('message', 'Cannot spawn dojo.')}")
+            return
+
+        dojo = result["dojo"]
+
+        embed = EmbedTable(
+            headers=["Info"],
+            title=f"⛩️ {dojo.get('name', 'Nuevo Dojo')}",
+            color=discord.Color.gold(),
+        ).render()
+
+        if dojo.get("image_url"):
+            embed.set_image(url=dojo["image_url"])
+
+        selected_lines = []
+        for uid in dojo.get("selected_players", []):
+            member = ctx.guild.get_member(int(uid))
+            name = member.mention if member else f"<@{uid}>"
+            selected_lines.append(name)
+
+        if selected_lines:
+            embed.add_field(
+                name="Jugadores seleccionados",
+                value=", ".join(selected_lines),
+                inline=False,
+            )
+
+        embed.add_field(
+            name="Cómo funciona",
+            value=(
+                "Los jugadores seleccionados pueden usar `.noah waifu dojo` para "
+                "empezar a entrenar. Tras **30 minutos** de carga obtendrán "
+                "**3 niveles aleatorios** (levelups pendientes)."
+            ),
+            inline=False,
+        )
 
         await ctx.send(embed=embed)
 
