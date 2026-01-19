@@ -711,7 +711,7 @@ def main():
 
             if result["killed"]:
                 table.add_row(["🩸 Status: Incapacitated (12h)"])
-                table.add_row(["Reward: Half heal + Level Up"])
+                table.add_row(["Reward: Half heal"])
 
         w = waifu_manager.get_waifu(str(ctx.author.id))
         embed = table.render()
