@@ -1059,6 +1059,7 @@ def main():
         await ctx.send("🖼️ Waifu image set successfully!")
 
     @waifu.command()
+    @with_delete_button()
     async def dojo(ctx):
         """.noah waifu dojo
         Train your waifu in the dojo to gain random level-ups.
