@@ -11,6 +11,7 @@ INCAP_SECONDS = 12 * 60 * 60  # 12h incapacitated
 STUN_SECONDS = 3 * 60 * 60  # 3h stun
 PEACEFUL_INCAP_SECONDS = 365 * 24 * 60 * 60  # 1 year
 DOJO_CHARGE_SECONDS = 30 * 60  # 30 minutes of training
+PROB_OF_SLEEPING_WHEN_STUNNED = 0.5
 
 
 def _utc_now() -> datetime:
@@ -314,7 +315,7 @@ class WaifuGameManager:
             {
                 "id": 1,
                 "name": "Phantom Waifu Dojo",
-                "image_url": "https://welcome.materiacore.com/wp-content/uploads/2026/01/replicate-prediction-jy70t2acdsrmr0cvtw9arezw6c.jpeg",
+                "image_url": "https://welcome.materiacore.com/wp-content/uploads/2026/01/replicate-prediction-jy70t2acdsrmr0cvtw9arezw6c.jpeg",  # noqa
             },
             {
                 "id": 2,
@@ -676,18 +677,35 @@ class WaifuGameManager:
 
         w.maybe_recover_from_incap(now)
 
-        if not self.devmode:
-            if w.is_incapacitated(now):
-                return {"ok": False, "message": "Waifu is incapacitated."}
-            if w.is_stunned(now):
-                return {"ok": False, "message": "Waifu is stunned."}
-
         today = now.date().isoformat()
         if not self.devmode and w.last_sleep_date == today:
             return {"ok": False, "message": "Already slept today."}
 
+        if not self.devmode:
+            if w.is_incapacitated(now):
+                return {"ok": False, "message": "Waifu is incapacitated."}
+            if w.is_stunned(now):
+                w.last_sleep_date = today
+                if self.rng.random() < PROB_OF_SLEEPING_WHEN_STUNNED:
+                    self._state["users"][str(user_id)] = self._serialize_waifu(w)
+                    self._save()
+                    return {
+                        "ok": False,
+                        "message": "Your waifu was stunned and failed to sleep.",
+                    }
+                else:
+                    w.heal(w.max_hp() // 2)
+                    self._state["users"][str(user_id)] = self._serialize_waifu(w)
+                    self._save()
+                    return {
+                        "ok": True,
+                        "message": "Waifu is stunned but managed to sleep.",
+                        "hp_after": w.current_hp,
+                        "healed": w.max_hp() // 2,
+                    }
+
         before = w.current_hp
-        w.heal(8)
+        w.heal(w.max_hp() // 2)
         w.last_sleep_date = today
 
         self._state["users"][str(user_id)] = self._serialize_waifu(w)

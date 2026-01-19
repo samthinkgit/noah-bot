@@ -1157,7 +1157,7 @@ def main():
             mins = remaining // 60
             secs = remaining % 60
             embed.add_field(
-                name="Charging...",
+                name="Training...",
                 value=f"You still have **{mins}m {secs}s** of training left.",
                 inline=False,
             )
