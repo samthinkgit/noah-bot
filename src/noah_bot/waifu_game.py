@@ -694,18 +694,18 @@ class WaifuGameManager:
                         "message": "Your waifu was stunned and failed to sleep.",
                     }
                 else:
-                    w.heal(w.max_hp() // 2)
+                    w.heal_full()
                     self._state["users"][str(user_id)] = self._serialize_waifu(w)
                     self._save()
                     return {
                         "ok": True,
                         "message": "Waifu is stunned but managed to sleep.",
                         "hp_after": w.current_hp,
-                        "healed": w.max_hp() // 2,
+                        "healed": w.current_hp,
                     }
 
         before = w.current_hp
-        w.heal(w.max_hp() // 2)
+        w.heal_full()
         w.last_sleep_date = today
 
         self._state["users"][str(user_id)] = self._serialize_waifu(w)
