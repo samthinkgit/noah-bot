@@ -26,5 +26,7 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "matplotlib>=3.10.8",
+    "memory-profiler>=0.61.0",
     "rich>=14.2.0",
 ]
