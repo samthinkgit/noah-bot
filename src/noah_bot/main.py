@@ -48,6 +48,7 @@ def main():
 
     intents = discord.Intents.default()
     intents.message_content = True
+    intents.members = True
 
     bot = commands.Bot(command_prefix=".", intents=intents)
 
@@ -538,61 +539,55 @@ def main():
 
         await ctx.send(embed=new_embed)
 
-        @noah.command()
-        async def setlist(ctx, members: commands.Greedy[discord.Member]):
-            """
-            .noah waifu setlist <@user1> <@user2> ...
-            Assigns role 'Lista' to mentioned users and removes it from everyone else.
-            """
+    @noah.command()
+    async def setlist(ctx):
 
-            # Permission check
-            if not ctx.author.guild_permissions.administrator:
-                await ctx.send("❌ Only administrators can use this command.")
-                return
+        if not ctx.author.guild_permissions.administrator:
+            await ctx.send("❌ Only administrators can use this command.")
+            return
 
-            if not members:
-                await ctx.send("❌ You must mention at least one user.")
-                return
+        members = ctx.message.mentions
+        if not members:
+            await ctx.send("❌ You must mention at least one user.")
+            return
 
-            guild = ctx.guild
+        guild = ctx.guild
+        role = discord.utils.get(guild.roles, name="Lista")
 
-            # Find role
-            role = discord.utils.get(guild.roles, name="Lista")
-            if not role:
-                await ctx.send("❌ Role 'Lista' not found in this server.")
-                return
+        if not role:
+            await ctx.send("❌ Role 'Lista' not found.")
+            return
 
-            # Convert to set for fast lookup
-            target_ids = {member.id for member in members}
+        target_ids = {m.id for m in members}
+        updated = 0
+        failed = []
 
-            updated = 0
+        # --- Remove role from users who shouldn't have it ---
+        await ctx.send("Fetching Users...")
 
-            for member in guild.members:
-                has_role = role in member.roles
+        async for member in guild.fetch_members(limit=None):
+            if member.id not in target_ids:
+                try:
+                    await member.remove_roles(role)
+                    updated += 1
+                except discord.Forbidden:
+                    failed.append(member.display_name)
 
-                # Should have role
-                if member.id in target_ids:
-                    if not has_role:
-                        try:
-                            await member.add_roles(role)
-                            updated += 1
-                        except discord.Forbidden:
-                            pass
-                else:
-                    # Should NOT have role
-                    if has_role:
-                        try:
-                            await member.remove_roles(role)
-                            updated += 1
-                        except discord.Forbidden:
-                            pass
+        # --- Add role to mentioned users ---
+        for member in members:
+            if role not in member.roles:
+                try:
+                    await member.add_roles(role)
+                    updated += 1
+                except discord.Forbidden:
+                    failed.append(member.display_name)
 
-            mentions = ", ".join(m.mention for m in members)
-            await ctx.send(
-                f"✅ Role **@Lista** assigned to: {mentions}\n"
-                f"🔄 Removed from everyone else.\n"
-                f"Users updated: `{updated}`"
-            )
+        msg = "✅ Lista updated.\n"
+
+        if failed:
+            msg += f"\n⚠ Could not modify: {', '.join(failed)}"
+
+        await ctx.send(msg)
 
     # ---------------- WAIFU GAME ---------------- #
     @noah.group()
@@ -1128,9 +1123,7 @@ def main():
 
         # Solo jugadores configurados con setplayers pueden usar el dojo
         if str(ctx.author.id) not in waifu_manager.get_players():
-            await ctx.send(
-                "❌ Only players in the player set can use the dojo."
-            )
+            await ctx.send("❌ Only players in the player set can use the dojo.")
             return
 
         result = waifu_manager.dojo_training_action(str(ctx.author.id))
@@ -1485,7 +1478,7 @@ def main():
         embed.add_field(
             name="How it works",
             value=(
-                "Selected players can use `.noah waifu dojo` to start training. After **30 minutes** of charging, they will receive " # noqa
+                "Selected players can use `.noah waifu dojo` to start training. After **30 minutes** of charging, they will receive "  # noqa
                 "**3 random levels** (pending levelups)."
             ),
             inline=False,
