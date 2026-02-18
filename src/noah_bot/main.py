@@ -538,6 +538,62 @@ def main():
 
         await ctx.send(embed=new_embed)
 
+        @noah.command()
+        async def setlist(ctx, members: commands.Greedy[discord.Member]):
+            """
+            .noah waifu setlist <@user1> <@user2> ...
+            Assigns role 'Lista' to mentioned users and removes it from everyone else.
+            """
+
+            # Permission check
+            if not ctx.author.guild_permissions.administrator:
+                await ctx.send("❌ Only administrators can use this command.")
+                return
+
+            if not members:
+                await ctx.send("❌ You must mention at least one user.")
+                return
+
+            guild = ctx.guild
+
+            # Find role
+            role = discord.utils.get(guild.roles, name="Lista")
+            if not role:
+                await ctx.send("❌ Role 'Lista' not found in this server.")
+                return
+
+            # Convert to set for fast lookup
+            target_ids = {member.id for member in members}
+
+            updated = 0
+
+            for member in guild.members:
+                has_role = role in member.roles
+
+                # Should have role
+                if member.id in target_ids:
+                    if not has_role:
+                        try:
+                            await member.add_roles(role)
+                            updated += 1
+                        except discord.Forbidden:
+                            pass
+                else:
+                    # Should NOT have role
+                    if has_role:
+                        try:
+                            await member.remove_roles(role)
+                            updated += 1
+                        except discord.Forbidden:
+                            pass
+
+            mentions = ", ".join(m.mention for m in members)
+            await ctx.send(
+                f"✅ Role **@Lista** assigned to: {mentions}\n"
+                f"🔄 Removed from everyone else.\n"
+                f"Users updated: `{updated}`"
+            )
+
     # ---------------- WAIFU GAME ---------------- #
     @noah.group()
     async def waifu(ctx):
