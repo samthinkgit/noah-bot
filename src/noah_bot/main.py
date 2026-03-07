@@ -1714,7 +1714,7 @@ def main():
 
         await ctx.send(f"🎤 Joined **{channel.name}**")
 
-    @tts.command(aliases="nts")
+    @tts.command(aliases=["nts"])
     async def say(ctx, *, text: str):
         """
         .noah tts say <text>
