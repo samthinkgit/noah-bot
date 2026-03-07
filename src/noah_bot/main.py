@@ -3,6 +3,8 @@ import re
 import random
 import time
 import discord
+import tempfile
+from noah_bot.tts import text_to_speech
 from rich import inspect
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -49,6 +51,7 @@ def main():
     intents = discord.Intents.default()
     intents.message_content = True
     intents.members = True
+    intents.voice_states = True
 
     bot = commands.Bot(command_prefix=".", intents=intents)
 
@@ -1672,6 +1675,73 @@ def main():
             pass  # Missing permissions
         except discord.NotFound:
             pass  # Already deleted
+
+    # ---------------- TTS ---------------- #
+    @noah.group()
+    async def tts(ctx):
+        """
+        Text to speech commands.
+        """
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Use `.noah tts join` or `.noah tts say`.")
+
+    @tts.command()
+    async def join(ctx):
+        """
+        .noah tts join
+        Make Noah join the user's voice channel.
+        """
+
+        if not ctx.author.voice:
+            await ctx.send("❌ You must be in a voice channel.")
+            return
+
+        channel = ctx.author.voice.channel
+        vc = ctx.voice_client
+
+        try:
+            if vc and vc.is_connected():
+                if vc.channel.id == channel.id:
+                    await ctx.send("🎤 Already in your voice channel.")
+                    return
+                await vc.move_to(channel)
+            else:
+                await channel.connect()
+
+        except Exception as e:
+            await ctx.send(f"❌ Voice connection failed: `{e}`")
+            return
+
+        await ctx.send(f"🎤 Joined **{channel.name}**")
+
+    @tts.command(aliases="nts")
+    async def say(ctx, *, text: str):
+        """
+        .noah tts say <text>
+        """
+
+        if not ctx.voice_client:
+            await ctx.send("❌ Noah is not in a voice channel. Use `.noah tts join`.")
+            return
+
+        voice = ctx.voice_client
+
+        # Generate TTS audio
+        stream = text_to_speech(text)
+
+        audio_bytes = b"".join(stream)
+
+        # Save to temporary mp3
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+            tmp.write(audio_bytes)
+            tmp_path = tmp.name
+
+        source = discord.FFmpegPCMAudio(tmp_path)
+
+        if voice.is_playing():
+            voice.stop()
+
+        voice.play(source)
 
     # ---------------- RUN ---------------- #
 
