@@ -234,65 +234,22 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
             color=discord.Color.teal(),
         )
         embed.set_thumbnail(url=target.display_avatar.url)
-
         if level_data:
-            embed.add_field(name="Nivel", value=str(level_data["level"]), inline=True)
-            embed.add_field(
-                name="Siguiente nivel",
-                value=f"En {_format_minutes(int(level_data['remaining_minutes']))}",
-                inline=True,
-            )
-            embed.add_field(
-                name="Req. por nivel",
-                value=_format_hours(level_data.get("hours_per_level")),
-                inline=True,
-            )
-            embed.add_field(
-                name="Progreso",
-                value=(
-                    f"{_format_minutes(int(level_data['progress_minutes']))} / "
-                    f"{_format_minutes(int(level_data['minutes_per_level']))} "
-                    f"({int(level_data['progress_percent'])}%)"
-                ),
-                inline=False,
+            embed.description = "\n".join(
+                [
+                    f"Nivel: `{level_data['level']}`",
+                    f"Siguiente nivel en: `{_format_minutes(int(level_data['remaining_minutes']))}`",
+                    f"Horas totales: `{_format_total_hours(total_minutes)}`",
+                ]
             )
         else:
-            embed.add_field(name="Nivel", value="Sistema desactivado", inline=False)
-
-        embed.add_field(
-            name="Horas totales",
-            value=_format_total_hours(total_minutes),
-            inline=True,
-        )
-        embed.add_field(
-            name="Tiempo total",
-            value=_format_minutes(total_minutes),
-            inline=True,
-        )
-        embed.add_field(
-            name="Sesiones",
-            value=str(int(stats_data.get("sessions", 0))),
-            inline=True,
-        )
-
-        if stats_data.get("is_connected"):
-            embed.add_field(
-                name="Sesion actual",
-                value=_format_minutes(int(stats_data.get("current_session_minutes", 0))),
-                inline=True,
+            embed.description = "\n".join(
+                [
+                    "Nivel: `Sistema desactivado`",
+                    "Siguiente nivel en: `-`",
+                    f"Horas totales: `{_format_total_hours(total_minutes)}`",
+                ]
             )
-
-        last_channel = (
-            (stats_data.get("active_session") or {}).get("channel_name")
-            or stats_data.get("last_channel_name")
-            or "-"
-        )
-        embed.add_field(name="Ultimo canal", value=last_channel, inline=True)
-        embed.add_field(
-            name="Ultima entrada",
-            value=_format_timestamp(stats_data.get("last_joined_at")),
-            inline=True,
-        )
 
         await ctx.send(embed=embed)
 
