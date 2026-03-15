@@ -54,6 +54,20 @@ def _is_listening(state: discord.VoiceState) -> bool:
     return not (state.self_deaf or state.deaf)
 
 
+def _get_trackable_channel(
+    state: discord.VoiceState,
+    voice_manager,
+) -> discord.VoiceChannel | discord.StageChannel | None:
+    if not _is_listening(state):
+        return None
+
+    channel = state.channel
+    if channel is None or voice_manager.is_channel_banned(channel.id):
+        return None
+
+    return channel
+
+
 def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) -> None:
     @bot.listen("on_ready")
     async def sync_voice_tracking() -> None:
@@ -67,7 +81,9 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
                 for member in channel.members:
                     if member.bot:
                         continue
-                    if not member.voice or not _is_listening(member.voice):
+                    if not member.voice:
+                        continue
+                    if _get_trackable_channel(member.voice, context.voice_manager) is None:
                         continue
 
                     connected_members.append(
@@ -93,8 +109,8 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
             return
 
         context = get_bot_context(bot)
-        before_channel = before.channel if _is_listening(before) else None
-        after_channel = after.channel if _is_listening(after) else None
+        before_channel = _get_trackable_channel(before, context.voice_manager)
+        after_channel = _get_trackable_channel(after, context.voice_manager)
 
         if before_channel == after_channel:
             return
@@ -134,6 +150,12 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
             [
                 ".noah vc startleveling <hours>",
                 "[Admin/Funcionarios] Activa los niveles por horas acumuladas.",
+            ]
+        )
+        chart.add_row(
+            [
+                ".noah vc banchannel #canal",
+                "[Admin/Funcionarios] Excluye un canal del conteo.",
             ]
         )
         await ctx.send(embed=chart.render())
@@ -368,4 +390,48 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
             "✅ Sistema de niveles activado. "
             f"Cada `{_format_hours(config['hours_per_level'])}` acumuladas "
             f"se sube un nivel."
+        )
+
+    @vc.command()
+    async def banchannel(
+        ctx: commands.Context,
+        channel: discord.abc.GuildChannel,
+    ) -> None:
+        if not _can_manage_vc_settings(ctx.author):
+            await ctx.send(
+                "❌ Solo administradores o el rol `Funcionarios` pueden usar este comando."
+            )
+            return
+
+        if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
+            await ctx.send("❌ Debes mencionar un canal de voz o stage.")
+            return
+
+        context = get_bot_context(ctx.bot)
+        context.voice_manager.ban_channel(
+            channel.id,
+            channel.name,
+            guild_id=ctx.guild.id,
+            guild_name=ctx.guild.name,
+        )
+
+        for member in channel.members:
+            if member.bot or not member.voice:
+                continue
+            if not _is_listening(member.voice):
+                continue
+
+            context.voice_manager.handle_voice_state_change(
+                member.id,
+                member.display_name,
+                before_channel_id=channel.id,
+                before_channel_name=channel.name,
+                after_channel_id=None,
+                after_channel_name=None,
+                guild_id=ctx.guild.id,
+                guild_name=ctx.guild.name,
+            )
+
+        await ctx.send(
+            f"🚫 El canal {channel.mention} ha sido baneado del conteo de voice stats."
         )

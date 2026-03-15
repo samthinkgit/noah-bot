@@ -25,6 +25,7 @@ class VoiceManager:
         self._users: dict[str, dict[str, Any]] = self._state["users"]
         self._active_sessions: dict[str, dict[str, Any]] = self._state["active_sessions"]
         self._leveling: dict[str, Any] = self._state["leveling"]
+        self._banned_channels: dict[str, dict[str, Any]] = self._state["banned_channels"]
 
     def _load(self) -> dict[str, Any]:
         if not self.json_path.exists():
@@ -42,6 +43,7 @@ class VoiceManager:
         users = data.get("users")
         active_sessions = data.get("active_sessions")
         leveling = data.get("leveling")
+        banned_channels = data.get("banned_channels")
         default_leveling = self._default_leveling()
 
         if isinstance(leveling, dict):
@@ -51,6 +53,9 @@ class VoiceManager:
             "users": users if isinstance(users, dict) else {},
             "active_sessions": active_sessions if isinstance(active_sessions, dict) else {},
             "leveling": default_leveling,
+            "banned_channels": (
+                banned_channels if isinstance(banned_channels, dict) else {}
+            ),
         }
 
     def _default_state(self) -> dict[str, dict[str, Any]]:
@@ -58,6 +63,7 @@ class VoiceManager:
             "users": {},
             "active_sessions": {},
             "leveling": self._default_leveling(),
+            "banned_channels": {},
         }
 
     def _default_leveling(self) -> dict[str, Any]:
@@ -74,6 +80,9 @@ class VoiceManager:
 
     def _user_key(self, user_id: int) -> str:
         return str(user_id)
+
+    def _channel_key(self, channel_id: int) -> str:
+        return str(channel_id)
 
     def _current_session_seconds(self, user_id: int) -> int:
         session = self._active_sessions.get(self._user_key(user_id))
@@ -325,6 +334,30 @@ class VoiceManager:
 
     def get_leveling_config(self) -> dict[str, Any]:
         return dict(self._leveling)
+
+    def ban_channel(
+        self,
+        channel_id: int,
+        channel_name: str,
+        *,
+        guild_id: int | None = None,
+        guild_name: str | None = None,
+    ) -> dict[str, Any]:
+        channel_key = self._channel_key(channel_id)
+        self._banned_channels[channel_key] = {
+            "channel_id": channel_id,
+            "channel_name": channel_name,
+            "guild_id": guild_id,
+            "guild_name": guild_name,
+            "updated_at": _to_iso(_utc_now()),
+        }
+        self._save()
+        return dict(self._banned_channels[channel_key])
+
+    def is_channel_banned(self, channel_id: int | None) -> bool:
+        if channel_id is None:
+            return False
+        return self._channel_key(channel_id) in self._banned_channels
 
     def handle_voice_state_change(
         self,
