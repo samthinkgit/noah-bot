@@ -223,12 +223,8 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
             await ctx.send("📭 Todavía no hay stats de voz registradas.")
             return
 
-        headers = ["#", "Usuario", "Tiempo"]
-        if leveling_config.get("enabled"):
-            headers.append("Nivel")
-
         table = EmbedTable(
-            headers=headers,
+            headers=["Ranking"],
             title="🏆 Voice Chat Ranking",
             color=discord.Color.gold(),
         )
@@ -236,17 +232,15 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
         for position, user_data in enumerate(top_users, start=1):
             member = ctx.guild.get_member(int(user_data["user_id"]))
             username = member.mention if member else user_data.get("display_name", "Unknown")
-            row = [
-                str(position),
-                username,
-                _format_minutes(int(user_data.get("effective_total_minutes", 0))),
-            ]
+            total_time = _format_minutes(int(user_data.get("effective_total_minutes", 0)))
+            row_text = f"`#{position}` {username} • `{total_time}`"
 
             if leveling_config.get("enabled"):
                 level_data = user_data.get("level_data")
-                row.append(str(level_data["level"]) if level_data else "1")
+                level = str(level_data["level"]) if level_data else "1"
+                row_text += f" • `Lv {level}`"
 
-            table.add_row(row)
+            table.add_row([row_text])
 
         await ctx.send(embed=table.render())
 
