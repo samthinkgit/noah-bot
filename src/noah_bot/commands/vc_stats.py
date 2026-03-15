@@ -43,6 +43,13 @@ def _can_manage_vc_settings(member: discord.Member) -> bool:
     return any(role.name == "Funcionarios" for role in member.roles)
 
 
+def _is_listening(state: discord.VoiceState) -> bool:
+    if state.channel is None:
+        return False
+
+    return not (state.self_deaf or state.deaf)
+
+
 def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) -> None:
     @bot.listen("on_ready")
     async def sync_voice_tracking() -> None:
@@ -55,6 +62,8 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
             for channel in voice_channels:
                 for member in channel.members:
                     if member.bot:
+                        continue
+                    if not member.voice or not _is_listening(member.voice):
                         continue
 
                     connected_members.append(
@@ -79,13 +88,13 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
         if member.bot:
             return
 
-        before_channel = before.channel
-        after_channel = after.channel
+        context = get_bot_context(bot)
+        before_channel = before.channel if _is_listening(before) else None
+        after_channel = after.channel if _is_listening(after) else None
 
         if before_channel == after_channel:
             return
 
-        context = get_bot_context(bot)
         context.voice_manager.handle_voice_state_change(
             member.id,
             member.display_name,
