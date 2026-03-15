@@ -1,0 +1,123 @@
+import re
+import time
+
+import discord
+from discord.ext import commands
+from rich import inspect
+
+from noah_bot.modules.bot_context import get_bot_context
+from noah_bot.modules.discord_formatter import WaifuClaimFormatter
+
+CLAIM_REGEX = re.compile(
+    r"Congrats,\s+(<@!?\d+>|@.+?)\s+you claimed a\s+\[(.*?)\]\s+(.*?)!",
+    re.IGNORECASE,
+)
+
+
+def register_core_commands(bot: commands.Bot) -> None:
+    @bot.event
+    async def on_ready() -> None:
+        print(f"Bot connected as {bot.user}")
+
+    @bot.command(aliases=["ti"])
+    async def timeit(ctx: commands.Context) -> None:
+        context = get_bot_context(ctx.bot)
+        started_at = time.time()
+        context.timeit_sessions[ctx.author.id] = started_at
+        context.latest_time_it = started_at
+
+    @bot.command()
+    async def claim(ctx: commands.Context, *, text: str | None = None) -> None:
+        _ = text
+        context = get_bot_context(ctx.bot)
+        user_id = ctx.author.id
+        user_emoji = context.emoji_manager.get_emoji(ctx.author.id)
+
+        if user_emoji:
+            try:
+                await ctx.message.add_reaction(user_emoji)
+            except discord.HTTPException:
+                pass
+
+        if user_id not in context.timeit_sessions:
+            return
+
+        start_time = context.timeit_sessions.pop(user_id)
+        elapsed = time.time() - start_time
+
+        await ctx.send(
+            f"{ctx.author.mention} obtained a time of `{elapsed:.4f}` seconds!"
+        )
+
+    @bot.command()
+    async def debug_history(ctx: commands.Context) -> None:
+        channel = ctx.channel
+        messages = [message async for message in channel.history(limit=None)]
+        text = [message.content for message in messages]
+        print(text)
+
+        await ctx.send(
+            f"DEBUG: I can see **{len(messages)} messages** in this channel."
+        )
+
+    @bot.command()
+    async def test_image(ctx: commands.Context) -> None:
+        image_urls = [
+            "https://i.blogs.es/8dee66/anime/500_333.jpeg",
+            "https://placebear.com/400/300",
+            "https://picsum.photos/400/300",
+        ]
+
+        for idx, url in enumerate(image_urls, start=1):
+            embed = discord.Embed(title=f"Test Image {idx}")
+            embed.set_image(url=url)
+            await ctx.send(embed=embed)
+
+    @bot.command()
+    async def get_embed(ctx: commands.Context) -> None:
+        if not ctx.message.reference:
+            await ctx.send("❌ You must reply to a message containing embeds.")
+            return
+
+        try:
+            replied_msg = await ctx.channel.fetch_message(
+                ctx.message.reference.message_id
+            )
+        except discord.NotFound:
+            await ctx.send("❌ Original message not found.")
+            return
+
+        for embed in replied_msg.embeds:
+            inspect(embed)
+
+    @bot.event
+    async def on_message(message: discord.Message) -> None:
+        if message.author.bot is False:
+            await bot.process_commands(message)
+            return
+
+        match = CLAIM_REGEX.search(message.content)
+        if not match:
+            await bot.process_commands(message)
+            return
+
+        _raw_user, rarity_symbol, waifu_name = match.groups()
+
+        user = message.mentions[0] if message.mentions else None
+        if not user:
+            return
+
+        embed = WaifuClaimFormatter.build_embed(
+            user=user,
+            waifu_name=waifu_name,
+            rarity_symbol=rarity_symbol,
+        )
+
+        await message.channel.send(embed=embed)
+
+        try:
+            await message.delete()
+        except discord.Forbidden:
+            pass
+        except discord.NotFound:
+            pass

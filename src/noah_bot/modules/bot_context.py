@@ -1,0 +1,35 @@
+from dataclasses import dataclass, field
+
+from discord.ext import commands
+
+from noah_bot.modules.ai import AiResponder
+from noah_bot.modules.discord_formatter import UserEmojiManager
+from noah_bot.modules.leaderboard import Leaderboard
+from noah_bot.modules.steallist import StealList
+from noah_bot.modules.voice_manager import VoiceManager
+from noah_bot.modules.waifu_game import WaifuGameManager
+
+
+@dataclass(slots=True)
+class BotContext:
+    leaderboard: Leaderboard = field(default_factory=Leaderboard)
+    emoji_manager: UserEmojiManager = field(default_factory=UserEmojiManager)
+    ai_responder: AiResponder = field(default_factory=AiResponder)
+    steallist: StealList = field(default_factory=StealList)
+    voice_manager: VoiceManager = field(default_factory=VoiceManager)
+    waifu_manager: WaifuGameManager = field(
+        default_factory=lambda: WaifuGameManager(json_path="waifu_game.json")
+    )
+    timeit_sessions: dict[int, float] = field(default_factory=dict)
+    latest_time_it: float | None = None
+
+
+def create_bot_context() -> BotContext:
+    return BotContext()
+
+
+def get_bot_context(bot: commands.Bot) -> BotContext:
+    context = getattr(bot, "noah_context", None)
+    if context is None:
+        raise RuntimeError("Bot context has not been initialized.")
+    return context
