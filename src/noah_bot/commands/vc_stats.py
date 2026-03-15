@@ -24,6 +24,10 @@ def _format_hours(hours_value: float | None) -> str:
     return f"{hours_value:g}h"
 
 
+def _format_total_hours(total_minutes: int) -> str:
+    return f"{max(total_minutes, 0) / 60:.2f}h"
+
+
 def _format_timestamp(iso_value: str | None) -> str:
     if not iso_value:
         return "-"
@@ -114,8 +118,10 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
     @vc.command()
     async def help(ctx: commands.Context) -> None:
         chart = EmbedTable(headers=["Command", "Description"], title="Voice Stats")
+        chart.add_row([".noah vc summary", "Resumen visual de tus stats de voz."])
         chart.add_row([".noah vc stats", "Muestra tus stats de voz."])
         chart.add_row([".noah vc stats @user", "Muestra las stats de otro usuario."])
+        chart.add_row([".noah vc summary @user", "Resumen visual de otro usuario."])
         chart.add_row([".noah vc top", "Ranking de tiempo en voice chat."])
         chart.add_row([".noah vc active", "Usuarios conectados ahora mismo."])
         chart.add_row(
@@ -207,6 +213,88 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
             )
 
         await ctx.send(embed=table.render())
+
+    @vc.command()
+    async def summary(
+        ctx: commands.Context,
+        member: discord.Member | None = None,
+    ) -> None:
+        target = member or ctx.author
+        context = get_bot_context(ctx.bot)
+        stats_data = context.voice_manager.get_user_stats(target.id)
+
+        if stats_data is None:
+            await ctx.send(f"🔇 {target.display_name} todavía no tiene stats de voz.")
+            return
+
+        total_minutes = int(stats_data.get("effective_total_minutes", 0))
+        level_data = stats_data.get("level_data")
+        embed = discord.Embed(
+            title=f"🎙️ Voice Summary - {target.display_name}",
+            color=discord.Color.teal(),
+        )
+        embed.set_thumbnail(url=target.display_avatar.url)
+
+        if level_data:
+            embed.add_field(name="Nivel", value=str(level_data["level"]), inline=True)
+            embed.add_field(
+                name="Siguiente nivel",
+                value=f"En {_format_minutes(int(level_data['remaining_minutes']))}",
+                inline=True,
+            )
+            embed.add_field(
+                name="Req. por nivel",
+                value=_format_hours(level_data.get("hours_per_level")),
+                inline=True,
+            )
+            embed.add_field(
+                name="Progreso",
+                value=(
+                    f"{_format_minutes(int(level_data['progress_minutes']))} / "
+                    f"{_format_minutes(int(level_data['minutes_per_level']))} "
+                    f"({int(level_data['progress_percent'])}%)"
+                ),
+                inline=False,
+            )
+        else:
+            embed.add_field(name="Nivel", value="Sistema desactivado", inline=False)
+
+        embed.add_field(
+            name="Horas totales",
+            value=_format_total_hours(total_minutes),
+            inline=True,
+        )
+        embed.add_field(
+            name="Tiempo total",
+            value=_format_minutes(total_minutes),
+            inline=True,
+        )
+        embed.add_field(
+            name="Sesiones",
+            value=str(int(stats_data.get("sessions", 0))),
+            inline=True,
+        )
+
+        if stats_data.get("is_connected"):
+            embed.add_field(
+                name="Sesion actual",
+                value=_format_minutes(int(stats_data.get("current_session_minutes", 0))),
+                inline=True,
+            )
+
+        last_channel = (
+            (stats_data.get("active_session") or {}).get("channel_name")
+            or stats_data.get("last_channel_name")
+            or "-"
+        )
+        embed.add_field(name="Ultimo canal", value=last_channel, inline=True)
+        embed.add_field(
+            name="Ultima entrada",
+            value=_format_timestamp(stats_data.get("last_joined_at")),
+            inline=True,
+        )
+
+        await ctx.send(embed=embed)
 
     @vc.command()
     async def top(ctx: commands.Context, limit: int = 10) -> None:
