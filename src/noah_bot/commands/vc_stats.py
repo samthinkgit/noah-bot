@@ -111,8 +111,6 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
 
             for channel in voice_channels:
                 for member in channel.members:
-                    if member.bot:
-                        continue
                     if not member.voice:
                         continue
                     if _get_trackable_channel(member.voice, context.voice_manager) is None:
@@ -137,9 +135,6 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
         before: discord.VoiceState,
         after: discord.VoiceState,
     ) -> None:
-        if member.bot:
-            return
-
         context = get_bot_context(bot)
         before_channel = _get_trackable_channel(before, context.voice_manager)
         after_channel = _get_trackable_channel(after, context.voice_manager)
@@ -338,7 +333,7 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
     async def top(ctx: commands.Context, limit: int = 10) -> None:
         context = get_bot_context(ctx.bot)
         safe_limit = max(1, min(limit, 15))
-        guild_member_ids = {member.id for member in ctx.guild.members if not member.bot}
+        guild_member_ids = {member.id for member in ctx.guild.members}
         leveling_config = context.voice_manager.get_leveling_config()
         top_users = context.voice_manager.get_top_users(
             safe_limit,
@@ -475,7 +470,7 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
         )
 
         for member in channel.members:
-            if member.bot or not member.voice:
+            if not member.voice:
                 continue
             if not _is_listening(member.voice):
                 continue
