@@ -87,12 +87,12 @@ async def _send_level_alert(
     if alert_type == "noah":
         noah_mention = bot_user.mention if bot_user else "@Noah"
         message = (
-            f"{noah_mention} ha apuntado {level} veces a {member.mention} en su "
+            f"{noah_mention} ha apuntado `{level}` veces a {member.mention} en su "
             "𝖉𝖊𝖆𝖙𝖍𝖓𝖔𝖙𝖊"
         )
     else:
         message = (
-            f"{member.mention} ha alcanzado el nivel {level} bajo la atenta mirada de "
+            f"{member.mention} ha alcanzado el nivel `{level}` bajo la atenta mirada de "
             "𝑴𝒐𝒏𝒕𝒂𝒅𝒊𝒕𝒐 𝑽𝑰𝑰"
         )
 
@@ -176,11 +176,17 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
     async def help(ctx: commands.Context) -> None:
         chart = EmbedTable(headers=["Command", "Description"], title="Voice Stats")
         chart.add_row([".noah vc summary", "Resumen visual de tus stats de voz."])
+        chart.add_row([".noah vc summary @user", "Resumen visual de otro usuario."])
         chart.add_row([".noah vc stats", "Muestra tus stats de voz."])
         chart.add_row([".noah vc stats @user", "Muestra las stats de otro usuario."])
-        chart.add_row([".noah vc summary @user", "Resumen visual de otro usuario."])
         chart.add_row([".noah vc top", "Ranking de tiempo en voice chat."])
         chart.add_row([".noah vc active", "Usuarios conectados ahora mismo."])
+        chart.add_row(
+            [
+                ".noah vc alerttype <montadito|noah>",
+                "Elige tu estilo personal de alerta de nivel.",
+            ]
+        )
         chart.add_row(
             [
                 ".noah vc setminutes @user <minutes>",
@@ -209,12 +215,6 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
             [
                 ".noah vc testalert",
                 "[Admin/Funcionarios] Envia una alerta de prueba con tu usuario.",
-            ]
-        )
-        chart.add_row(
-            [
-                ".noah vc alerttype <montadito|noah>",
-                "Elige tu estilo personal de alerta de nivel.",
             ]
         )
         await ctx.send(embed=chart.render())
