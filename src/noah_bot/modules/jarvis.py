@@ -167,14 +167,16 @@ def _probe_video_size(video_path: Path) -> tuple[int, int]:
     return int(width_text), int(height_text)
 
 
-def create_jarvis_video(message: str) -> bytes:
+def create_jarvis_gif(message: str) -> bytes:
     text = f"Jarvis, {message.strip()}"
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         input_video_path = temp_path / "jarvis_source.mp4"
         banner_path = temp_path / "jarvis_banner.png"
-        output_video_path = temp_path / "jarvis_captioned.mp4"
+        stacked_video_path = temp_path / "jarvis_stacked.mp4"
+        palette_path = temp_path / "jarvis_palette.png"
+        output_gif_path = temp_path / "jarvis_captioned.gif"
 
         _download_video(input_video_path)
         width, _height = _probe_video_size(input_video_path)
@@ -201,10 +203,42 @@ def create_jarvis_video(message: str) -> bytes:
                 "yuv420p",
                 "-movflags",
                 "+faststart",
-                str(output_video_path),
+                str(stacked_video_path),
             ],
             capture_output=True,
             check=True,
         )
 
-        return output_video_path.read_bytes()
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(stacked_video_path),
+                "-vf",
+                "fps=15,scale=498:-1:flags=lanczos,palettegen",
+                str(palette_path),
+            ],
+            capture_output=True,
+            check=True,
+        )
+
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(stacked_video_path),
+                "-i",
+                str(palette_path),
+                "-lavfi",
+                "fps=15,scale=498:-1:flags=lanczos[x];[x][1:v]paletteuse",
+                "-loop",
+                "0",
+                str(output_gif_path),
+            ],
+            capture_output=True,
+            check=True,
+        )
+
+        return output_gif_path.read_bytes()

@@ -8,7 +8,7 @@ from rich import inspect
 
 from noah_bot.modules.bot_context import get_bot_context
 from noah_bot.modules.discord_formatter import WaifuClaimFormatter
-from noah_bot.modules.jarvis import create_jarvis_video
+from noah_bot.modules.jarvis import create_jarvis_gif
 
 CLAIM_REGEX = re.compile(
     r"Congrats,\s+(<@!?\d+>|@.+?)\s+you claimed a\s+\[(.*?)\]\s+(.*?)!",
@@ -42,13 +42,13 @@ def register_core_commands(bot: commands.Bot) -> None:
         await ctx.typing()
 
         try:
-            video_bytes = create_jarvis_video(cleaned_message)
+            gif_bytes = create_jarvis_gif(cleaned_message)
         except Exception:
             await ctx.send("❌ I couldn't render the Jarvis clip.")
             return
 
-        buffer = BytesIO(video_bytes)
-        await ctx.send(file=discord.File(buffer, filename="jarvis.mp4"))
+        buffer = BytesIO(gif_bytes)
+        await ctx.send(file=discord.File(buffer, filename="jarvis.gif"))
 
     @bot.command()
     async def claim(ctx: commands.Context, *, text: str | None = None) -> None:
