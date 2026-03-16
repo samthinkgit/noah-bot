@@ -26,6 +26,7 @@ class VoiceManager:
         self._active_sessions: dict[str, dict[str, Any]] = self._state["active_sessions"]
         self._leveling: dict[str, Any] = self._state["leveling"]
         self._banned_channels: dict[str, dict[str, Any]] = self._state["banned_channels"]
+        self._alert_channels: dict[str, dict[str, Any]] = self._state["alert_channels"]
 
     def _load(self) -> dict[str, Any]:
         if not self.json_path.exists():
@@ -44,6 +45,7 @@ class VoiceManager:
         active_sessions = data.get("active_sessions")
         leveling = data.get("leveling")
         banned_channels = data.get("banned_channels")
+        alert_channels = data.get("alert_channels")
         default_leveling = self._default_leveling()
 
         if isinstance(leveling, dict):
@@ -56,6 +58,9 @@ class VoiceManager:
             "banned_channels": (
                 banned_channels if isinstance(banned_channels, dict) else {}
             ),
+            "alert_channels": (
+                alert_channels if isinstance(alert_channels, dict) else {}
+            ),
         }
 
     def _default_state(self) -> dict[str, dict[str, Any]]:
@@ -64,6 +69,7 @@ class VoiceManager:
             "active_sessions": {},
             "leveling": self._default_leveling(),
             "banned_channels": {},
+            "alert_channels": {},
         }
 
     def _default_leveling(self) -> dict[str, Any]:
@@ -83,6 +89,15 @@ class VoiceManager:
 
     def _channel_key(self, channel_id: int) -> str:
         return str(channel_id)
+
+    def _guild_key(self, guild_id: int) -> str:
+        return str(guild_id)
+
+    def _extract_level(self, total_minutes: int) -> int | None:
+        level_data = self._build_level_data(total_minutes)
+        if level_data is None:
+            return None
+        return int(level_data["level"])
 
     def _current_session_seconds(self, user_id: int) -> int:
         session = self._active_sessions.get(self._user_key(user_id))
@@ -141,11 +156,13 @@ class VoiceManager:
                 "last_channel_name": None,
                 "last_guild_id": guild_id,
                 "last_guild_name": guild_name,
+                "alert_type": "montadito",
                 "updated_at": None,
             },
         )
 
         user["display_name"] = display_name
+        user["alert_type"] = user.get("alert_type") or "montadito"
 
         if guild_id is not None:
             user["last_guild_id"] = guild_id
@@ -259,6 +276,8 @@ class VoiceManager:
 
         user = self._ensure_user(user_id, display_name, guild_id, guild_name)
         user["display_name"] = display_name
+        total_minutes_before = int(user.get("total_minutes", 0))
+        previous_level = self._extract_level(total_minutes_before)
         user["total_seconds"] = int(user.get("total_seconds", 0)) + elapsed_seconds
         user["total_minutes"] = int(user.get("total_minutes", 0)) + minutes_added
         user["sessions"] = int(user.get("sessions", 0)) + 1
@@ -275,6 +294,14 @@ class VoiceManager:
 
         self._save()
 
+        current_total_minutes = int(user.get("total_minutes", 0))
+        new_level = self._extract_level(current_total_minutes)
+        leveled_up = (
+            previous_level is not None
+            and new_level is not None
+            and new_level > previous_level
+        )
+
         return {
             "tracked": True,
             "minutes_added": minutes_added,
@@ -282,6 +309,9 @@ class VoiceManager:
             "started_at": session.get("started_at"),
             "ended_at": _to_iso(finished_at),
             "channel_name": session.get("channel_name"),
+            "previous_level": previous_level,
+            "new_level": new_level,
+            "leveled_up": leveled_up,
         }
 
     def set_total_minutes(
@@ -296,6 +326,7 @@ class VoiceManager:
         sanitized_minutes = max(0, int(total_minutes))
         user = self._ensure_user(user_id, display_name, guild_id, guild_name)
         updated_at = _utc_now()
+        previous_level = self._extract_level(int(user.get("total_minutes", 0)))
 
         user["total_minutes"] = sanitized_minutes
         user["total_seconds"] = sanitized_minutes * 60
@@ -309,12 +340,45 @@ class VoiceManager:
 
         self._save()
 
+        new_level = self._extract_level(sanitized_minutes)
         return {
             "user_id": user_id,
             "display_name": display_name,
             "total_minutes": sanitized_minutes,
             "level_data": self._build_level_data(sanitized_minutes),
+            "previous_level": previous_level,
+            "new_level": new_level,
         }
+
+    def set_user_alert_type(
+        self,
+        user_id: int,
+        display_name: str,
+        alert_type: str,
+        *,
+        guild_id: int | None = None,
+        guild_name: str | None = None,
+    ) -> dict[str, Any]:
+        sanitized_alert_type = alert_type.strip().lower()
+        if sanitized_alert_type not in {"montadito", "noah"}:
+            raise ValueError("Invalid alert type.")
+
+        user = self._ensure_user(user_id, display_name, guild_id, guild_name)
+        user["alert_type"] = sanitized_alert_type
+        user["updated_at"] = _to_iso(_utc_now())
+        self._save()
+
+        return {
+            "user_id": user_id,
+            "display_name": display_name,
+            "alert_type": sanitized_alert_type,
+        }
+
+    def get_user_alert_type(self, user_id: int) -> str:
+        user = self._users.get(self._user_key(user_id))
+        if user is None:
+            return "montadito"
+        return str(user.get("alert_type") or "montadito")
 
     def configure_leveling(self, hours_per_level: float) -> dict[str, Any]:
         sanitized_hours = float(hours_per_level)
@@ -358,6 +422,30 @@ class VoiceManager:
         if channel_id is None:
             return False
         return self._channel_key(channel_id) in self._banned_channels
+
+    def set_alert_channel(
+        self,
+        guild_id: int,
+        guild_name: str,
+        channel_id: int,
+        channel_name: str,
+    ) -> dict[str, Any]:
+        guild_key = self._guild_key(guild_id)
+        self._alert_channels[guild_key] = {
+            "guild_id": guild_id,
+            "guild_name": guild_name,
+            "channel_id": channel_id,
+            "channel_name": channel_name,
+            "updated_at": _to_iso(_utc_now()),
+        }
+        self._save()
+        return dict(self._alert_channels[guild_key])
+
+    def get_alert_channel(self, guild_id: int) -> dict[str, Any] | None:
+        alert_channel = self._alert_channels.get(self._guild_key(guild_id))
+        if alert_channel is None:
+            return None
+        return dict(alert_channel)
 
     def handle_voice_state_change(
         self,

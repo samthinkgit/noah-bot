@@ -68,6 +68,38 @@ def _get_trackable_channel(
     return channel
 
 
+async def _send_level_alert(
+    guild: discord.Guild,
+    voice_manager,
+    member: discord.Member,
+    bot_user: discord.ClientUser | None,
+    level: int,
+) -> bool:
+    alert_config = voice_manager.get_alert_channel(guild.id)
+    if alert_config is None:
+        return False
+
+    channel = guild.get_channel(int(alert_config["channel_id"]))
+    if channel is None or not isinstance(channel, discord.TextChannel):
+        return False
+
+    alert_type = voice_manager.get_user_alert_type(member.id)
+    if alert_type == "noah":
+        noah_mention = bot_user.mention if bot_user else "@Noah"
+        message = (
+            f"{noah_mention} ha apuntado {level} veces a {member.mention} en su "
+            "𝖉𝖊𝖆𝖙𝖍𝖓𝖔𝖙𝖊"
+        )
+    else:
+        message = (
+            f"{member.mention} ha alcanzado el nivel {level} bajo la atenta mirada de "
+            "𝑴𝒐𝒏𝒕𝒂𝒅𝒊𝒕𝒐 𝑽𝑰𝑰"
+        )
+
+    await channel.send(message)
+    return True
+
+
 def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) -> None:
     @bot.listen("on_ready")
     async def sync_voice_tracking() -> None:
@@ -115,7 +147,7 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
         if before_channel == after_channel:
             return
 
-        context.voice_manager.handle_voice_state_change(
+        result = context.voice_manager.handle_voice_state_change(
             member.id,
             member.display_name,
             before_channel_id=before_channel.id if before_channel else None,
@@ -125,6 +157,15 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
             guild_id=member.guild.id,
             guild_name=member.guild.name,
         )
+
+        if result and result.get("leveled_up") and result.get("new_level") is not None:
+            await _send_level_alert(
+                member.guild,
+                context.voice_manager,
+                member,
+                bot.user,
+                int(result["new_level"]),
+            )
 
     @noah_group.group(name="vc")
     async def vc(ctx: commands.Context) -> None:
@@ -156,6 +197,24 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
             [
                 ".noah vc banchannel #canal",
                 "[Admin/Funcionarios] Excluye un canal del conteo.",
+            ]
+        )
+        chart.add_row(
+            [
+                ".noah vc alertmessages #canal",
+                "[Admin/Funcionarios] Define el canal unico para alertas de nivel.",
+            ]
+        )
+        chart.add_row(
+            [
+                ".noah vc testalert",
+                "[Admin/Funcionarios] Envia una alerta de prueba con tu usuario.",
+            ]
+        )
+        chart.add_row(
+            [
+                ".noah vc alerttype <montadito|noah>",
+                "Elige tu estilo personal de alerta de nivel.",
             ]
         )
         await ctx.send(embed=chart.render())
@@ -434,4 +493,81 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
 
         await ctx.send(
             f"🚫 El canal {channel.mention} ha sido baneado del conteo de voice stats."
+        )
+
+    @vc.command()
+    async def alertmessages(
+        ctx: commands.Context,
+        channel: discord.TextChannel,
+    ) -> None:
+        if not _can_manage_vc_settings(ctx.author):
+            await ctx.send(
+                "❌ Solo administradores o el rol `Funcionarios` pueden usar este comando."
+            )
+            return
+
+        context = get_bot_context(ctx.bot)
+        context.voice_manager.set_alert_channel(
+            ctx.guild.id,
+            ctx.guild.name,
+            channel.id,
+            channel.name,
+        )
+
+        await ctx.send(
+            f"✅ Las alertas de nivel de voice chat ahora se enviaran en {channel.mention}."
+        )
+
+    @vc.command()
+    async def testalert(ctx: commands.Context) -> None:
+        if not _can_manage_vc_settings(ctx.author):
+            await ctx.send(
+                "❌ Solo administradores o el rol `Funcionarios` pueden usar este comando."
+            )
+            return
+
+        context = get_bot_context(ctx.bot)
+        stats_data = context.voice_manager.get_user_stats(ctx.author.id)
+        level_data = stats_data.get("level_data") if stats_data else None
+        level = int(level_data["level"]) if level_data else 1
+
+        sent = await _send_level_alert(
+            ctx.guild,
+            context.voice_manager,
+            ctx.author,
+            ctx.bot.user,
+            level,
+        )
+        if not sent:
+            await ctx.send(
+                "❌ No hay un canal de alertas configurado. Usa `.noah vc alertmessages #canal`."
+            )
+            return
+
+        await ctx.send("✅ Alerta de prueba enviada.")
+
+    @vc.command()
+    async def alerttype(ctx: commands.Context, alert_type: str) -> None:
+        sanitized_alert_type = alert_type.strip().lower()
+        if sanitized_alert_type not in {"montadito", "noah"}:
+            await ctx.send("❌ Debes elegir `montadito` o `noah`.")
+            return
+
+        context = get_bot_context(ctx.bot)
+        context.voice_manager.set_user_alert_type(
+            ctx.author.id,
+            ctx.author.display_name,
+            sanitized_alert_type,
+            guild_id=ctx.guild.id,
+            guild_name=ctx.guild.name,
+        )
+
+        if sanitized_alert_type == "noah":
+            await ctx.send(
+                "✅ Tu alerta de nivel ahora usara el formato `noah`."
+            )
+            return
+
+        await ctx.send(
+            "✅ Tu alerta de nivel ahora usara el formato `montadito`."
         )
