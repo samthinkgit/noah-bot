@@ -5,6 +5,7 @@ from discord.ext import commands
 from noah_bot.modules.ai import AiResponder
 from noah_bot.modules.discord_formatter import UserEmojiManager
 from noah_bot.modules.leaderboard import Leaderboard
+from noah_bot.modules.relics_game import RelicsGameManager
 from noah_bot.modules.steallist import StealList
 from noah_bot.modules.voice_manager import VoiceManager
 from noah_bot.modules.waifu_game import WaifuGameManager
@@ -19,6 +20,9 @@ class BotContext:
     voice_manager: VoiceManager = field(default_factory=VoiceManager)
     waifu_manager: WaifuGameManager = field(
         default_factory=lambda: WaifuGameManager(json_path="waifu_game.json")
+    )
+    relics_manager: RelicsGameManager = field(
+        default_factory=lambda: RelicsGameManager(json_path="noah_relics.json")
     )
     timeit_sessions: dict[int, float] = field(default_factory=dict)
     latest_time_it: float | None = None

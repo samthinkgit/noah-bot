@@ -6,6 +6,7 @@ from io import BytesIO
 import discord
 from discord.ext import commands
 
+from noah_bot.commands.relics import register_relics_commands
 from noah_bot.commands.tts import register_tts_commands
 from noah_bot.commands.vc_stats import register_vc_stats_commands
 from noah_bot.commands.waifu import register_waifu_commands
@@ -62,6 +63,7 @@ def register_noah_commands(bot: commands.Bot) -> None:
         )
         chart.add_row([".waifuracer help", "Show waifuracer commands."])
         chart.add_row([".noah waifu help", "Show waifu battle commands"])
+        chart.add_row([".noah relics help", "Explica el modo noah relics."])
         chart.add_row([".steallist help", "Show steallist commands."])
 
         await ctx.send(embed=chart.render())
@@ -328,5 +330,6 @@ def register_noah_commands(bot: commands.Bot) -> None:
         await ctx.send(message)
 
     register_waifu_commands(noah)
+    register_relics_commands(noah)
     register_tts_commands(noah)
     register_vc_stats_commands(bot, noah)
