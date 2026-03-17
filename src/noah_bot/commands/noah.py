@@ -183,11 +183,12 @@ def register_noah_commands(bot: commands.Bot) -> None:
         )
 
         quoted_lines = "\n".join(
-            f'"{line}"' if line.strip() else '""' for line in content.splitlines()
+            f"> {line}" if line.strip() else ">"
+            for line in content.splitlines()
         )
 
         embed = discord.Embed(
-            description=f"**{quoted_lines}**\n\n*{user.mention} - {created_at}*",
+            description=f"{quoted_lines}\n\n*{user.mention} - {created_at}*",
             color=embed_color,
         )
         embed.set_thumbnail(url=user.display_avatar.url)
