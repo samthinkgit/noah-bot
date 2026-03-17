@@ -173,6 +173,7 @@ def _build_explain_embed() -> discord.Embed:
         value=(
             "`.noah relics spawn`\n"
             "`.noah relics link`\n"
+            "`.noah relics showprobs`\n"
             "`.noah relics inv [@usuario]`\n"
             "`.noah relics sacrifice`\n"
             "`.noah relics gift <cantidad> @usuario`\n"
@@ -193,6 +194,7 @@ def _build_help_embed() -> discord.Embed:
         value=(
             "`.noah relics spawn` Invoca una reliquia si no hay otra activa.\n"
             "`.noah relics link` Intenta vincularte a la reliquia activa.\n"
+            "`.noah relics showprobs` Muestra las probabilidades del modo.\n"
             "`.noah relics inv [@usuario]` Muestra tu inventario o el de otro usuario.\n"
             "`.noah relics sacrifice` Sacrifica tus pv actuales en la reliquia activa.\n"
             "`.noah relics gift <cantidad> @usuario` Regala EE a otro usuario.\n"
@@ -203,6 +205,63 @@ def _build_help_embed() -> discord.Embed:
         ),
         inline=False,
     )
+    return embed
+
+
+def _build_probabilities_embed() -> discord.Embed:
+    embed = discord.Embed(
+        title="Probabilidades de Noah Relics",
+        color=discord.Color.orange(),
+        description=(
+            "Los `pv` son porcentaje directo de vinculación acumulada. "
+            "Si tienes `0.5pv`, tienes un `0.5%` de probabilidad; si llegas a `3pv`, tienes un `3%`."
+        ),
+    )
+
+    spawn_lines = []
+    for relic_key in RELIC_ORDER:
+        relic = RELIC_TYPES[relic_key]
+        spawn_lines.append(
+            f"**{relic.title}:** `{relic.spawn_weight}%` spawn, "
+            f"`+{relic.reward_essence} EE`"
+        )
+
+    embed.add_field(
+        name="Probabilidades de aparición",
+        value="\n".join(spawn_lines),
+        inline=False,
+    )
+
+    link_lines = []
+    for relic_key in RELIC_ORDER:
+        relic = RELIC_TYPES[relic_key]
+        if relic.auto_claim:
+            link_lines.append(
+                f"**{relic.title}:** se vincula automáticamente al invocador."
+            )
+            continue
+
+        link_lines.append(
+            f"**{relic.title}:** `+{_format_pv(relic.link_value)}pv` por intento"
+        )
+
+    embed.add_field(
+        name="Probabilidad de vinculación",
+        value="\n".join(link_lines),
+        inline=False,
+    )
+
+    embed.add_field(
+        name="Ejemplo",
+        value=(
+            "Si sale un **Amuleto**, cada `link` suma `0.5pv`.\n"
+            "Tras 1 intento tienes `0.5%`.\n"
+            "Tras 2 intentos tienes `1%`.\n"
+            "Si haces spam durante el cooldown, hay un `50%` de quedar desvinculado."
+        ),
+        inline=False,
+    )
+
     return embed
 
 
@@ -524,3 +583,7 @@ def register_relics_commands(noah_group: commands.Group) -> None:
     @relics.command()
     async def help(ctx: commands.Context) -> None:
         await ctx.send(embed=_build_help_embed())
+
+    @relics.command()
+    async def showprobs(ctx: commands.Context) -> None:
+        await ctx.send(embed=_build_probabilities_embed())
