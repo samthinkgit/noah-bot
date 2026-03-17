@@ -48,6 +48,9 @@ def register_noah_commands(bot: commands.Bot) -> None:
         chart.add_row([".noah ask <question>", "Ask a question to Noah AI."])
         chart.add_row([".noah summary", "Summarize recent channel messages."])
         chart.add_row([".noah behonest <question>", "Ask Noah without filters."])
+        chart.add_row(
+            [".noah quote <user>", "Quote the replied message in a styled embed."]
+        )
         chart.add_row([".noah merge", "Render all images from a replied message."])
         chart.add_row([".noah if <type>", "Invert embed rarity symbol and color."])
         chart.add_row([".noah ping", "Check if Noah is responsive."])
@@ -146,6 +149,66 @@ def register_noah_commands(bot: commands.Bot) -> None:
         buffer.seek(0)
 
         await ctx.send(file=discord.File(buffer, filename="rendered_images.png"))
+
+    @noah.command()
+    async def quote(
+        ctx: commands.Context, user: discord.Member | discord.User | None = None
+    ) -> None:
+        if user is None:
+            await ctx.send("❌ Use `.noah quote <user>` while replying to a message.")
+            return
+
+        if not ctx.message.reference:
+            await ctx.send("❌ You must reply to a message to quote it.")
+            return
+
+        try:
+            replied_msg = await ctx.channel.fetch_message(
+                ctx.message.reference.message_id
+            )
+        except discord.NotFound:
+            await ctx.send("❌ Original message not found.")
+            return
+
+        content = replied_msg.content.strip()
+        if not content:
+            await ctx.send("❌ The replied message has no text content to quote.")
+            return
+
+        created_at = replied_msg.created_at.strftime("%d/%m/%Y")
+        embed_color = (
+            user.color
+            if isinstance(user, discord.Member) and user.color.value
+            else discord.Color.from_rgb(245, 187, 87)
+        )
+
+        quoted_lines = "\n".join(
+            f'"{line}"' if line.strip() else '""' for line in content.splitlines()
+        )
+
+        embed = discord.Embed(
+            description=f"**{quoted_lines}**\n\n*{user.mention} - {created_at}*",
+            color=embed_color,
+        )
+        embed.set_thumbnail(url=user.display_avatar.url)
+
+        sent_message = await ctx.send(embed=embed)
+
+        try:
+            await ctx.message.delete()
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+            pass
+
+        try:
+            await replied_msg.delete()
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+            pass
+
+        for emoji in ("⬆️", "⬇️"):
+            try:
+                await sent_message.add_reaction(emoji)
+            except discord.HTTPException:
+                pass
 
     @noah.command(name="if")
     async def invert_rarity(ctx: commands.Context, rarity: str) -> None:
