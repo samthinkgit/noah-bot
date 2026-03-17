@@ -63,7 +63,7 @@ def register_noah_commands(bot: commands.Bot) -> None:
         )
         chart.add_row([".waifuracer help", "Show waifuracer commands."])
         chart.add_row([".noah waifu help", "Show waifu battle commands"])
-        chart.add_row([".noah relics help", "Explica el modo noah relics."])
+        chart.add_row([".noah relics help", "Muestra los comandos de noah relics."])
         chart.add_row([".steallist help", "Show steallist commands."])
 
         await ctx.send(embed=chart.render())

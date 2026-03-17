@@ -183,6 +183,29 @@ def _build_explain_embed() -> discord.Embed:
     return embed
 
 
+def _build_help_embed() -> discord.Embed:
+    embed = discord.Embed(
+        title="Comandos de Noah Relics",
+        color=discord.Color.dark_gold(),
+    )
+    embed.add_field(
+        name="Comandos",
+        value=(
+            "`.noah relics spawn` Invoca una reliquia si no hay otra activa.\n"
+            "`.noah relics link` Intenta vincularte a la reliquia activa.\n"
+            "`.noah relics inv [@usuario]` Muestra tu inventario o el de otro usuario.\n"
+            "`.noah relics sacrifice` Sacrifica tus pv actuales en la reliquia activa.\n"
+            "`.noah relics gift <cantidad> @usuario` Regala EE a otro usuario.\n"
+            "`.noah relics explain` Explica brevemente cómo se juega.\n"
+            "`.noah relics help` Muestra esta lista de comandos.\n"
+            "`.noah relics forcespawn <tipo>` Fuerza un spawn. Solo admins/Funcionarios.\n"
+            "`.noah relics cancelspawn` Cancela la reliquia activa. Solo admins/Funcionarios."
+        ),
+        inline=False,
+    )
+    return embed
+
+
 async def _get_active_message(
     bot: commands.Bot,
     manager: RelicsGameManager,
@@ -500,4 +523,4 @@ def register_relics_commands(noah_group: commands.Group) -> None:
 
     @relics.command()
     async def help(ctx: commands.Context) -> None:
-        await ctx.send(embed=_build_explain_embed())
+        await ctx.send(embed=_build_help_embed())
