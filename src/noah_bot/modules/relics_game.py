@@ -41,6 +41,7 @@ def _today_local(now: Optional[datetime] = None) -> str:
 class RelicDefinition:
     key: str
     title: str
+    tier: int
     spawn_weight: float
     link_value: float
     reward_essence: int
@@ -54,6 +55,7 @@ RELIC_TYPES: dict[str, RelicDefinition] = {
     "vestigio": RelicDefinition(
         key="vestigio",
         title="Vestigio",
+        tier=0,
         spawn_weight=85.0,
         link_value=2.0,
         reward_essence=1,
@@ -64,6 +66,7 @@ RELIC_TYPES: dict[str, RelicDefinition] = {
     "fragmento": RelicDefinition(
         key="fragmento",
         title="Fragmento",
+        tier=1,
         spawn_weight=10.0,
         link_value=1.0,
         reward_essence=3,
@@ -74,6 +77,7 @@ RELIC_TYPES: dict[str, RelicDefinition] = {
     "amuleto": RelicDefinition(
         key="amuleto",
         title="Amuleto",
+        tier=2,
         spawn_weight=5.0,
         link_value=0.5,
         reward_essence=5,
@@ -84,6 +88,7 @@ RELIC_TYPES: dict[str, RelicDefinition] = {
     "reliquia": RelicDefinition(
         key="reliquia",
         title="Reliquia",
+        tier=3,
         spawn_weight=1.0,
         link_value=0.5,
         reward_essence=20,
@@ -94,6 +99,7 @@ RELIC_TYPES: dict[str, RelicDefinition] = {
     "marca_oscura": RelicDefinition(
         key="marca_oscura",
         title="Marca Oscura",
+        tier=4,
         spawn_weight=0.1,
         link_value=0.0,
         reward_essence=25,
@@ -228,6 +234,7 @@ class RelicsGameManager:
         return {
             "type": definition.key,
             "title": definition.title,
+            "tier": definition.tier,
             "link_value": definition.link_value,
             "reward_essence": definition.reward_essence,
             "image_name": definition.image_name,
@@ -289,6 +296,25 @@ class RelicsGameManager:
             "last_spawn_date": user_state.get("last_spawn_date"),
             "last_link_at": user_state.get("last_link_at"),
             "linked_counts": copy.deepcopy(user_state["linked_counts"]),
+        }
+
+    def get_link_cooldown_remaining(
+        self,
+        user_id: str,
+        now: Optional[datetime] = None,
+    ) -> dict[str, Any]:
+        now = now or _utc_now()
+        user_state = self._ensure_user(user_id)
+        last_link_at = _from_iso(user_state.get("last_link_at"))
+
+        if last_link_at is None:
+            return {"ready": True, "seconds_left": 0}
+
+        elapsed = (now - last_link_at).total_seconds()
+        seconds_left = max(0, int(LINK_COOLDOWN_SECONDS - elapsed))
+        return {
+            "ready": seconds_left == 0,
+            "seconds_left": seconds_left,
         }
 
     def spawn_relic(

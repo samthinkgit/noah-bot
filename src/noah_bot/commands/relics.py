@@ -55,7 +55,7 @@ def _relic_image_name(relic: dict) -> Optional[str]:
 
 def _build_relic_embed(relic: dict) -> discord.Embed:
     embed = discord.Embed(
-        title=relic["title"],
+        title=f"{relic['title']} · Tier {relic['tier']}",
         color=discord.Color(relic["color"]),
     )
 
@@ -105,7 +105,6 @@ def _build_relic_embed(relic: dict) -> discord.Embed:
             inline=False,
         )
 
-    embed.set_footer(text="Usa `.noah relics explain` para ver las reglas.")
     image_name = _relic_image_name(relic)
     if image_name is not None:
         embed.set_thumbnail(url=f"attachment://{image_name}")
@@ -169,6 +168,7 @@ def _build_explain_embed() -> discord.Embed:
         value=(
             "`.noah relics spawn`\n"
             "`.noah relics link`\n"
+            "`.noah relics remaining`\n"
             "`.noah relics showprobs`\n"
             "`.noah relics inv [@usuario]`\n"
             "`.noah relics sacrifice`\n"
@@ -190,6 +190,7 @@ def _build_help_embed() -> discord.Embed:
         value=(
             "`.noah relics spawn` Invoca una reliquia si no hay otra activa.\n"
             "`.noah relics link` Intenta vincularte a la reliquia activa.\n"
+            "`.noah relics remaining` Muestra tu cooldown actual de vinculación.\n"
             "`.noah relics showprobs` Muestra las probabilidades del modo.\n"
             "`.noah relics inv [@usuario]` Muestra tu inventario o el de otro usuario.\n"
             "`.noah relics sacrifice` Sacrifica tus pv actuales en la reliquia activa.\n"
@@ -425,6 +426,21 @@ def register_relics_commands(noah_group: commands.Group) -> None:
         target_user = user or ctx.author
         inventory = context.relics_manager.get_user_inventory(str(target_user.id))
         await ctx.send(embed=_build_inventory_embed(target_user, inventory))
+
+    @relics.command()
+    async def remaining(ctx: commands.Context) -> None:
+        context = get_bot_context(ctx.bot)
+        cooldown = context.relics_manager.get_link_cooldown_remaining(str(ctx.author.id))
+
+        if cooldown["ready"]:
+            await ctx.send("✅ Ya puedes volver a usar `.noah relics link`.")
+            return
+
+        await ctx.send(
+            "⏳ Te quedan "
+            f"`{_format_remaining(cooldown['seconds_left'])}` "
+            "para volver a vincularte."
+        )
 
     @relics.command()
     async def sacrifice(ctx: commands.Context) -> None:
