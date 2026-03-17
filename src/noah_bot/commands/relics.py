@@ -72,11 +72,7 @@ def _build_relic_embed(relic: dict) -> discord.Embed:
             f"**+{relic['reward_essence']} EE** ha sido entregada."
         )
     else:
-        embed.description = (
-            f"Usa `.noah relics link` para intentar vincularte y conseguir "
-            f"**+{relic['reward_essence']} EE**.\n"
-            f"Cada intento suma **{_format_pv(relic['link_value'])} pv** de probabilidad acumulada."
-        )
+        embed.description = None
 
     if not relic.get("auto_claim"):
         embed.add_field(
