@@ -6,6 +6,7 @@ import discord
 from discord.ext import commands
 
 from noah_bot.modules.bot_context import get_bot_context
+from noah_bot.modules.discord_formatter import with_delete_button
 from noah_bot.modules.relics_game import (
     LINK_COOLDOWN_SECONDS,
     RELIC_ORDER,
@@ -428,6 +429,7 @@ def register_relics_commands(noah_group: commands.Group) -> None:
         await ctx.send(embed=_build_inventory_embed(target_user, inventory))
 
     @relics.command()
+    @with_delete_button()
     async def remaining(ctx: commands.Context) -> None:
         context = get_bot_context(ctx.bot)
         cooldown = context.relics_manager.get_link_cooldown_remaining(str(ctx.author.id))
