@@ -308,6 +308,19 @@ async def _refresh_relic_message(message: discord.Message, relic: dict) -> None:
         pass
 
 
+async def _send_relic_message(
+    channel: discord.abc.Messageable,
+    relic: dict,
+) -> discord.Message:
+    embed = _build_relic_embed(relic)
+    image_file = _relic_image_file(relic)
+
+    if image_file is None:
+        return await channel.send(embed=embed)
+
+    return await channel.send(embed=embed, file=image_file)
+
+
 async def register_relic_cleanup(
     ctx: commands.Context,
     reaction_emoji: str = "🔗",
@@ -340,14 +353,16 @@ def register_relics_commands(noah_group: commands.Group) -> None:
         context = get_bot_context(ctx.bot)
         manager = context.relics_manager
 
-        active_relic, _ = await _get_active_message(ctx.bot, manager)
+        active_relic, active_message = await _get_active_message(ctx.bot, manager)
         if active_relic is not None:
-            location = (
-                f" en <#{active_relic['channel_id']}>"
-                if active_relic.get("channel_id")
-                else ""
-            )
-            await ctx.send(f"❌ Ya hay una reliquia activa{location}.")
+            if active_message is not None:
+                try:
+                    await active_message.delete()
+                except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                    pass
+
+            sent_message = await _send_relic_message(ctx.channel, active_relic)
+            manager.set_active_message(sent_message.id, ctx.channel.id)
             return
 
         result = manager.spawn_relic(
@@ -361,13 +376,7 @@ def register_relics_commands(noah_group: commands.Group) -> None:
             return
 
         relic = result["relic"]
-        embed = _build_relic_embed(relic)
-        image_file = _relic_image_file(relic)
-
-        if image_file is None:
-            sent_message = await ctx.send(embed=embed)
-        else:
-            sent_message = await ctx.send(embed=embed, file=image_file)
+        sent_message = await _send_relic_message(ctx.channel, relic)
 
         if result["code"] == "spawned":
             manager.set_active_message(sent_message.id, ctx.channel.id)
@@ -546,13 +555,7 @@ def register_relics_commands(noah_group: commands.Group) -> None:
             return
 
         relic = result["relic"]
-        embed = _build_relic_embed(relic)
-        image_file = _relic_image_file(relic)
-
-        if image_file is None:
-            sent_message = await ctx.send(embed=embed)
-        else:
-            sent_message = await ctx.send(embed=embed, file=image_file)
+        sent_message = await _send_relic_message(ctx.channel, relic)
 
         if result["code"] == "spawned":
             manager.set_active_message(sent_message.id, ctx.channel.id)
