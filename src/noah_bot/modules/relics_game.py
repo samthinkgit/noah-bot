@@ -9,7 +9,7 @@ from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 try:
     LOCAL_TIMEZONE = ZoneInfo("Europe/Madrid")
 except Exception:
@@ -153,11 +153,26 @@ class RelicsGameManager:
         self._state.setdefault("schema_version", SCHEMA_VERSION)
         self._state.setdefault("users", {})
         self._state.setdefault("active_relic", None)
+        self._normalize_active_relic_state()
 
         for user_id in list(self._state["users"].keys()):
             self._ensure_user(user_id)
 
         self._save()
+
+    def _normalize_active_relic_state(self) -> None:
+        active_relic = self._state.get("active_relic")
+        if active_relic is None:
+            return
+
+        active_relic.setdefault("linkers", {})
+        active_relic.setdefault("alerts", {})
+
+        for user_id, alert_state in list(active_relic["alerts"].items()):
+            active_relic["alerts"][str(user_id)] = {
+                "channel_id": alert_state.get("channel_id"),
+                "message_id": alert_state.get("message_id"),
+            }
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.json_path) or ".", exist_ok=True)
@@ -210,6 +225,7 @@ class RelicsGameManager:
             "channel_id": int(channel_id) if channel_id is not None else None,
             "message_id": None,
             "linkers": {},
+            "alerts": {},
             "claimed_by": None,
             "claimed_at": None,
         }
@@ -271,6 +287,99 @@ class RelicsGameManager:
 
     def has_active_relic(self) -> bool:
         return self._state.get("active_relic") is not None
+
+    def get_active_link_alerts(self) -> list[dict[str, Any]]:
+        active_relic = self._state.get("active_relic")
+        if active_relic is None:
+            return []
+
+        alerts = []
+        for user_id, alert_state in active_relic.get("alerts", {}).items():
+            alerts.append(
+                {
+                    "user_id": str(user_id),
+                    "channel_id": alert_state.get("channel_id"),
+                    "message_id": alert_state.get("message_id"),
+                }
+            )
+
+        alerts.sort(key=lambda item: item["user_id"])
+        return alerts
+
+    def toggle_link_alert(
+        self,
+        user_id: str,
+        channel_id: int | None,
+    ) -> dict[str, Any]:
+        active_relic = self._state.get("active_relic")
+        if active_relic is None:
+            return {"ok": False, "code": "no_active_relic"}
+
+        alerts = active_relic.setdefault("alerts", {})
+        user_id = str(user_id)
+        existing_alert = alerts.get(user_id)
+
+        if existing_alert is not None:
+            removed_alert = {
+                "user_id": user_id,
+                "channel_id": existing_alert.get("channel_id"),
+                "message_id": existing_alert.get("message_id"),
+            }
+            del alerts[user_id]
+            self._save()
+            return {
+                "ok": True,
+                "code": "disabled",
+                "alert": removed_alert,
+            }
+
+        alerts[user_id] = {
+            "channel_id": int(channel_id) if channel_id is not None else None,
+            "message_id": None,
+        }
+        self._save()
+        return {
+            "ok": True,
+            "code": "enabled",
+            "alert": {
+                "user_id": user_id,
+                "channel_id": int(channel_id) if channel_id is not None else None,
+                "message_id": None,
+            },
+        }
+
+    def set_link_alert_message(self, user_id: str, message_id: int | None) -> bool:
+        active_relic = self._state.get("active_relic")
+        if active_relic is None:
+            return False
+
+        alerts = active_relic.setdefault("alerts", {})
+        alert_state = alerts.get(str(user_id))
+        if alert_state is None:
+            return False
+
+        alert_state["message_id"] = int(message_id) if message_id is not None else None
+        self._save()
+        return True
+
+    def clear_link_alert_message(self, user_id: str) -> Optional[dict[str, Any]]:
+        active_relic = self._state.get("active_relic")
+        if active_relic is None:
+            return None
+
+        alerts = active_relic.setdefault("alerts", {})
+        alert_state = alerts.get(str(user_id))
+        if alert_state is None:
+            return None
+
+        cleared_alert = {
+            "user_id": str(user_id),
+            "channel_id": alert_state.get("channel_id"),
+            "message_id": alert_state.get("message_id"),
+        }
+        alert_state["message_id"] = None
+        self._save()
+        return cleared_alert
 
     def set_active_message(self, message_id: int, channel_id: int | None = None) -> None:
         active_relic = self._state.get("active_relic")
@@ -363,6 +472,19 @@ class RelicsGameManager:
         if active_relic is None:
             return {"ok": False, "code": "no_active_relic"}
 
+        alerts = active_relic.setdefault("alerts", {})
+        alert_state = alerts.get(str(user_id))
+        cleared_alert = None
+        had_alert_message = False
+        if alert_state is not None:
+            cleared_alert = {
+                "user_id": str(user_id),
+                "channel_id": alert_state.get("channel_id"),
+                "message_id": alert_state.get("message_id"),
+            }
+            had_alert_message = cleared_alert["message_id"] is not None
+            alert_state["message_id"] = None
+
         user_state = self._ensure_user(user_id)
         last_link_at = _from_iso(user_state.get("last_link_at"))
 
@@ -380,12 +502,16 @@ class RelicsGameManager:
                     was_unlinked = True
                     self._save()
 
+                if had_alert_message and not was_unlinked:
+                    self._save()
+
                 return {
                     "ok": False,
                     "code": "cooldown",
                     "seconds_left": max(0, int(LINK_COOLDOWN_SECONDS - elapsed)),
                     "was_unlinked": was_unlinked,
                     "removed_pv": removed_pv,
+                    "cleared_alert": cleared_alert,
                     "relic": self.get_active_relic(),
                 }
 
@@ -408,6 +534,7 @@ class RelicsGameManager:
                 "added_pv": definition.link_value,
                 "current_pv": current_link["pv"],
                 "attempts": current_link["attempts"],
+                "cleared_alert": cleared_alert,
                 "relic": self.get_active_relic(),
             }
 
@@ -415,6 +542,7 @@ class RelicsGameManager:
         active_relic["claimed_at"] = _to_iso(now)
         reward = self._reward_user_for_relic(user_id, active_relic["type"])
         snapshot = self._public_relic_view(active_relic)
+        cleanup_alerts = self.get_active_link_alerts()
         self._state["active_relic"] = None
         self._save()
 
@@ -424,6 +552,8 @@ class RelicsGameManager:
             "winner_id": str(user_id),
             "added_pv": definition.link_value,
             "current_pv": current_link["pv"],
+            "cleared_alert": cleared_alert,
+            "cleanup_alerts": cleanup_alerts,
             "relic": snapshot,
             **reward,
         }

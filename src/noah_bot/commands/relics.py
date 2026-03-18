@@ -17,6 +17,7 @@ from noah_bot.modules.relics_game import (
 
 
 MEDIA_DIR = Path(__file__).resolve().parents[3] / "media"
+ALERT_POLL_SECONDS = 5
 
 
 def _can_manage_relics(member: discord.Member) -> bool:
@@ -170,6 +171,7 @@ def _build_explain_embed() -> discord.Embed:
         value=(
             "`.noah relics spawn`\n"
             "`.noah relics link`\n"
+            "`.noah relics alert`\n"
             "`.noah relics remaining`\n"
             "`.noah relics showprobs`\n"
             "`.noah relics inv [@usuario]`\n"
@@ -192,6 +194,7 @@ def _build_help_embed() -> discord.Embed:
         value=(
             "`.noah relics spawn` Invoca una reliquia si no hay otra activa.\n"
             "`.noah relics link` Intenta vincularte a la reliquia activa.\n"
+            "`.noah relics alert` Activa o desactiva avisos cuando puedas volver a usar `link`.\n"
             "`.noah relics remaining` Muestra tu cooldown actual de vinculación.\n"
             "`.noah relics showprobs` Muestra las probabilidades del modo.\n"
             "`.noah relics inv [@usuario]` Muestra tu inventario o el de otro usuario.\n"
@@ -321,6 +324,107 @@ async def _send_relic_message(
     return await channel.send(embed=embed, file=image_file)
 
 
+async def _resolve_alert_channel(
+    bot: commands.Bot,
+    channel_id: int | None,
+) -> Optional[discord.TextChannel | discord.Thread]:
+    if channel_id is None:
+        return None
+
+    channel = bot.get_channel(int(channel_id))
+    if channel is None:
+        try:
+            channel = await bot.fetch_channel(int(channel_id))
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            return None
+
+    if not isinstance(channel, (discord.TextChannel, discord.Thread)):
+        return None
+
+    return channel
+
+
+async def _delete_alert_message(
+    bot: commands.Bot,
+    alert: Optional[dict],
+) -> None:
+    if not alert or not alert.get("message_id") or not alert.get("channel_id"):
+        return
+
+    channel = await _resolve_alert_channel(bot, alert.get("channel_id"))
+    if channel is None:
+        return
+
+    try:
+        await channel.get_partial_message(int(alert["message_id"])).delete()
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        pass
+
+
+async def _cleanup_alert_messages(
+    bot: commands.Bot,
+    alerts: list[dict],
+) -> None:
+    for alert in alerts:
+        await _delete_alert_message(bot, alert)
+
+
+async def _dispatch_link_alert(
+    bot: commands.Bot,
+    manager: RelicsGameManager,
+    alert: dict,
+) -> bool:
+    channel = await _resolve_alert_channel(bot, alert.get("channel_id"))
+    if channel is None:
+        return False
+
+    try:
+        message = await channel.send(
+            f"<@{alert['user_id']}> ya puedes volver a usar `.noah relics link`."
+        )
+    except (discord.Forbidden, discord.HTTPException):
+        return False
+
+    manager.set_link_alert_message(alert["user_id"], message.id)
+    return True
+
+
+async def _process_relic_alerts(bot: commands.Bot) -> None:
+    context = get_bot_context(bot)
+    manager = context.relics_manager
+
+    for alert in manager.get_active_link_alerts():
+        cooldown = manager.get_link_cooldown_remaining(alert["user_id"])
+        if cooldown["ready"]:
+            if not alert.get("message_id"):
+                await _dispatch_link_alert(bot, manager, alert)
+            continue
+
+        if alert.get("message_id"):
+            await _delete_alert_message(bot, alert)
+            manager.set_link_alert_message(alert["user_id"], None)
+
+
+async def _relic_alert_loop(bot: commands.Bot) -> None:
+    await bot.wait_until_ready()
+
+    while not bot.is_closed():
+        try:
+            await _process_relic_alerts(bot)
+        except Exception:
+            pass
+
+        await asyncio.sleep(ALERT_POLL_SECONDS)
+
+
+def _ensure_relic_alert_loop(bot: commands.Bot) -> None:
+    task = getattr(bot, "_noah_relics_alert_task", None)
+    if task is not None and not task.done():
+        return
+
+    bot._noah_relics_alert_task = asyncio.create_task(_relic_alert_loop(bot))
+
+
 async def register_relic_cleanup(
     ctx: commands.Context,
     reaction_emoji: str = "🔗",
@@ -338,7 +442,11 @@ async def register_relic_cleanup(
         pass
 
 
-def register_relics_commands(noah_group: commands.Group) -> None:
+def register_relics_commands(bot: commands.Bot, noah_group: commands.Group) -> None:
+    @bot.listen("on_ready")
+    async def _start_relic_alert_loop() -> None:
+        _ensure_relic_alert_loop(bot)
+
     @noah_group.group()
     async def relics(ctx: commands.Context) -> None:
         if ctx.invoked_subcommand is None:
@@ -383,6 +491,7 @@ def register_relics_commands(noah_group: commands.Group) -> None:
 
     @relics.command()
     async def link(ctx: commands.Context) -> None:
+        _ensure_relic_alert_loop(ctx.bot)
         context = get_bot_context(ctx.bot)
         manager = context.relics_manager
         active_relic, active_message = await _get_active_message(ctx.bot, manager)
@@ -393,6 +502,7 @@ def register_relics_commands(noah_group: commands.Group) -> None:
 
         result = manager.link_user(str(ctx.author.id))
         updated_relic = result.get("relic")
+        await _delete_alert_message(ctx.bot, result.get("cleared_alert"))
 
         if not result["ok"]:
             if result["code"] == "cooldown":
@@ -422,6 +532,9 @@ def register_relics_commands(noah_group: commands.Group) -> None:
         if updated_relic is not None and active_message is not None:
             await _refresh_relic_message(active_message, updated_relic)
 
+        if result["code"] == "claimed":
+            await _cleanup_alert_messages(ctx.bot, result.get("cleanup_alerts", []))
+
         await register_relic_cleanup(ctx)
 
     @relics.command()
@@ -433,6 +546,31 @@ def register_relics_commands(noah_group: commands.Group) -> None:
         target_user = user or ctx.author
         inventory = context.relics_manager.get_user_inventory(str(target_user.id))
         await ctx.send(embed=_build_inventory_embed(target_user, inventory))
+
+    @relics.command()
+    async def alert(ctx: commands.Context) -> None:
+        _ensure_relic_alert_loop(ctx.bot)
+        context = get_bot_context(ctx.bot)
+        manager = context.relics_manager
+
+        if manager.get_active_relic() is None:
+            await ctx.send("❌ No hay ninguna reliquia activa ahora mismo.")
+            return
+
+        result = manager.toggle_link_alert(str(ctx.author.id), ctx.channel.id)
+        if not result["ok"]:
+            await ctx.send("❌ No se ha podido actualizar la alerta.")
+            return
+
+        if result["code"] == "disabled":
+            await _delete_alert_message(ctx.bot, result.get("alert"))
+            await ctx.send("🔕 Has desactivado las alertas de `link` para esta reliquia.")
+            return
+
+        await _process_relic_alerts(ctx.bot)
+        await ctx.send(
+            "🔔 Te avisaré aquí cada vez que puedas volver a usar `.noah relics link`."
+        )
 
     @relics.command()
     @with_delete_button()
@@ -580,6 +718,7 @@ def register_relics_commands(noah_group: commands.Group) -> None:
             await ctx.send("❌ No hay ninguna reliquia activa.")
             return
 
+        cleanup_alerts = manager.get_active_link_alerts()
         manager.clear_active_relic()
 
         if message is not None:
@@ -587,6 +726,8 @@ def register_relics_commands(noah_group: commands.Group) -> None:
                 await message.delete()
             except (discord.Forbidden, discord.NotFound, discord.HTTPException):
                 pass
+
+        await _cleanup_alert_messages(ctx.bot, cleanup_alerts)
 
         await ctx.send("✅ La reliquia activa ha sido cancelada.")
 
