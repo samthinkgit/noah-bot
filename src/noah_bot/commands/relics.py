@@ -564,13 +564,11 @@ def register_relics_commands(bot: commands.Bot, noah_group: commands.Group) -> N
 
         if result["code"] == "disabled":
             await _delete_alert_message(ctx.bot, result.get("alert"))
-            await ctx.send("🔕 Has desactivado las alertas de `link` para esta reliquia.")
+            await register_relic_cleanup(ctx, "🔕")
             return
 
         await _process_relic_alerts(ctx.bot)
-        await ctx.send(
-            "🔔 Te avisaré aquí cada vez que puedas volver a usar `.noah relics link`."
-        )
+        await register_relic_cleanup(ctx, "🔔")
 
     @relics.command()
     @with_delete_button()
