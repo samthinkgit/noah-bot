@@ -14,7 +14,7 @@ try:
     LOCAL_TIMEZONE = ZoneInfo("Europe/Madrid")
 except Exception:
     LOCAL_TIMEZONE = datetime.now().astimezone().tzinfo or timezone.utc
-LINK_COOLDOWN_SECONDS = 10 * 60
+LINK_COOLDOWN_SECONDS = 5 * 60
 SPAM_UNLINK_CHANCE = 0.5
 MAX_LINK_PV = 100.0
 EPSILON = 1e-9
@@ -331,17 +331,10 @@ class RelicsGameManager:
         if self._state.get("active_relic") is not None:
             return {"ok": False, "code": "active_exists", "relic": self.get_active_relic()}
 
-        user_state = self._ensure_user(user_id)
-        today = _today_local(now)
-
-        if not ignore_daily_limit and user_state.get("last_spawn_date") == today:
-            return {"ok": False, "code": "daily_limit"}
+        self._ensure_user(user_id)
 
         relic_type = forced_type or self._select_random_relic_type()
         relic_state = self._build_relic_state(relic_type, user_id, guild_id, channel_id, now)
-
-        if not ignore_daily_limit:
-            user_state["last_spawn_date"] = today
 
         if RELIC_TYPES[relic_type].auto_claim:
             relic_state["claimed_by"] = str(user_id)

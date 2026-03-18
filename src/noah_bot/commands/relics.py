@@ -158,7 +158,8 @@ def _build_explain_embed() -> discord.Embed:
     embed.add_field(
         name="Reglas rápidas",
         value=(
-            "Cada usuario puede hacer `spawn` una vez al día.\n"
+            "Solo puede haber una reliquia activa a la vez.\n"
+            "Cuando una reliquia termina o se cancela, puede spawnearse otra.\n"
             f"Cada `link` tiene un cooldown de **{LINK_COOLDOWN_SECONDS // 60} minutos**.\n"
             "Si spameas `link` durante el cooldown, hay un 50% de probabilidad de quedar desvinculado."
         ),
@@ -356,10 +357,6 @@ def register_relics_commands(noah_group: commands.Group) -> None:
         )
 
         if not result["ok"]:
-            if result["code"] == "daily_limit":
-                await ctx.send("❌ Ya has invocado una reliquia hoy.")
-                return
-
             await ctx.send("❌ No se ha podido invocar la reliquia.")
             return
 
