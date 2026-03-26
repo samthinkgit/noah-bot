@@ -331,5 +331,5 @@ def register_noah_commands(bot: commands.Bot) -> None:
 
     register_waifu_commands(noah)
     register_relics_commands(bot, noah)
-    register_tts_commands(noah)
+    register_tts_commands(bot, noah)
     register_vc_stats_commands(bot, noah)

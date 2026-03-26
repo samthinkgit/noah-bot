@@ -1,16 +1,67 @@
+import os
+import random
 import tempfile
 
 import discord
 from discord.ext import commands
 
+from noah_bot.modules.bot_context import get_bot_context
 from noah_bot.modules.tts import text_to_speech
 
 
-def register_tts_commands(noah_group: commands.Group) -> None:
+GREET_MESSAGES = (
+    "[happy]Buenas {user}",
+    "[seductive]Hola {user}",
+)
+
+
+def _build_greet_name(member: discord.Member | discord.User) -> str:
+    return member.display_name.strip() or member.name
+
+
+def _disable_greet(bot: commands.Bot, guild_id: int | None) -> None:
+    if guild_id is None:
+        return
+
+    context = get_bot_context(bot)
+    context.tts_greet_sessions.pop(guild_id, None)
+
+
+async def _play_tts(
+    voice_client: discord.VoiceClient,
+    text: str,
+) -> None:
+    stream = text_to_speech(text)
+    audio_bytes = b"".join(stream)
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+        tmp.write(audio_bytes)
+        tmp_path = tmp.name
+
+    source = discord.FFmpegPCMAudio(tmp_path)
+
+    def _cleanup(error: Exception | None) -> None:
+        try:
+            source.cleanup()
+        except Exception:
+            pass
+
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+    if voice_client.is_playing():
+        voice_client.stop()
+
+    voice_client.play(source, after=_cleanup)
+
+
+def register_tts_commands(bot: commands.Bot, noah_group: commands.Group) -> None:
     @noah_group.group()
     async def tts(ctx: commands.Context) -> None:
         if ctx.invoked_subcommand is None:
-            await ctx.send("Use `.noah tts join` or `.noah tts say`.")
+            await ctx.send("Use `.noah tts join`, `.noah tts say` or `.noah tts greet`.")
 
     @tts.command()
     async def join(ctx: commands.Context) -> None:
@@ -33,6 +84,9 @@ def register_tts_commands(noah_group: commands.Group) -> None:
             await ctx.send(f"❌ Voice connection failed: `{exc}`")
             return
 
+        if ctx.guild is not None:
+            _disable_greet(ctx.bot, ctx.guild.id)
+
         await ctx.send(f"🎤 Joined **{channel.name}**")
 
     @tts.command(aliases=["nts"])
@@ -41,17 +95,78 @@ def register_tts_commands(noah_group: commands.Group) -> None:
             await ctx.send("❌ Noah is not in a voice channel. Use `.noah tts join`.")
             return
 
+        try:
+            await _play_tts(ctx.voice_client, text)
+        except Exception as exc:
+            await ctx.send(f"❌ TTS failed: `{exc}`")
+
+    @tts.command()
+    async def greet(ctx: commands.Context) -> None:
+        if ctx.guild is None:
+            await ctx.send("❌ This command can only be used in a server.")
+            return
+
         voice_client = ctx.voice_client
-        stream = text_to_speech(text)
-        audio_bytes = b"".join(stream)
+        if voice_client is None or not voice_client.is_connected() or voice_client.channel is None:
+            await ctx.send("❌ Noah has to be in a voice channel first. Use `.noah tts join`.")
+            return
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-            tmp.write(audio_bytes)
-            tmp_path = tmp.name
+        context = get_bot_context(ctx.bot)
+        active_channel_id = context.tts_greet_sessions.get(ctx.guild.id)
 
-        source = discord.FFmpegPCMAudio(tmp_path)
+        if active_channel_id == voice_client.channel.id:
+            context.tts_greet_sessions.pop(ctx.guild.id, None)
+            await ctx.send("🔇 TTS greet desactivado.")
+            return
 
-        if voice_client.is_playing():
-            voice_client.stop()
+        context.tts_greet_sessions[ctx.guild.id] = voice_client.channel.id
+        await ctx.send(f"🔊 TTS greet activado en **{voice_client.channel.name}**.")
 
-        voice_client.play(source)
+    @bot.listen("on_voice_state_update")
+    async def _tts_greet_on_voice_join(
+        member: discord.Member,
+        before: discord.VoiceState,
+        after: discord.VoiceState,
+    ) -> None:
+        guild = member.guild
+        context = get_bot_context(bot)
+        tracked_channel_id = context.tts_greet_sessions.get(guild.id)
+        if tracked_channel_id is None:
+            return
+
+        me = guild.me
+        if me is None:
+            _disable_greet(bot, guild.id)
+            return
+
+        if member.id == me.id:
+            new_channel_id = after.channel.id if after.channel else None
+            if new_channel_id != tracked_channel_id:
+                _disable_greet(bot, guild.id)
+            return
+
+        if member.bot:
+            return
+
+        if after.channel is None or after.channel.id != tracked_channel_id:
+            return
+
+        previous_channel_id = before.channel.id if before.channel else None
+        if previous_channel_id == tracked_channel_id:
+            return
+
+        voice_client = guild.voice_client
+        if voice_client is None or not voice_client.is_connected() or voice_client.channel is None:
+            _disable_greet(bot, guild.id)
+            return
+
+        if voice_client.channel.id != tracked_channel_id:
+            _disable_greet(bot, guild.id)
+            return
+
+        greet_text = random.choice(GREET_MESSAGES).format(user=_build_greet_name(member))
+
+        try:
+            await _play_tts(voice_client, greet_text)
+        except Exception:
+            _disable_greet(bot, guild.id)
