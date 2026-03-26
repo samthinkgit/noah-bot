@@ -1,5 +1,6 @@
 import os
 import random
+import re
 import tempfile
 
 import discord
@@ -10,13 +11,25 @@ from noah_bot.modules.tts import text_to_speech
 
 
 GREET_MESSAGES = (
-    "[happy]Buenas {user}",
-    "[seductive]Hola {user}",
+    "[happy]Buenas, {user}",
+    "[seductive]Hola, {user}",
+)
+
+FAREWELL_MESSAGES = (
+    "[sad]Adios, {user}",
+    "[soft]Hasta luego, {user}",
 )
 
 
 def _build_greet_name(member: discord.Member | discord.User) -> str:
-    return member.display_name.strip() or member.name
+    raw_name = (
+        getattr(member, "display_name", None)
+        or getattr(member, "global_name", None)
+        or member.name
+    )
+    sanitized_name = re.sub(r"[^0-9A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+", " ", raw_name)
+    sanitized_name = re.sub(r"\s+", " ", sanitized_name).strip()
+    return sanitized_name or member.name
 
 
 def _disable_greet(bot: commands.Bot, guild_id: int | None) -> None:
@@ -149,6 +162,23 @@ def register_tts_commands(bot: commands.Bot, noah_group: commands.Group) -> None
             return
 
         if after.channel is None or after.channel.id != tracked_channel_id:
+            if before.channel is not None and before.channel.id == tracked_channel_id:
+                farewell_text = random.choice(FAREWELL_MESSAGES).format(
+                    user=_build_greet_name(member)
+                )
+                voice_client = guild.voice_client
+                if voice_client is None or not voice_client.is_connected() or voice_client.channel is None:
+                    _disable_greet(bot, guild.id)
+                    return
+
+                if voice_client.channel.id != tracked_channel_id:
+                    _disable_greet(bot, guild.id)
+                    return
+
+                try:
+                    await _play_tts(voice_client, farewell_text)
+                except Exception:
+                    _disable_greet(bot, guild.id)
             return
 
         previous_channel_id = before.channel.id if before.channel else None
