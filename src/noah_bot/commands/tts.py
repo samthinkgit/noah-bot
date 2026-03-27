@@ -1,3 +1,4 @@
+import asyncio
 import os
 import random
 import re
@@ -197,6 +198,24 @@ def register_tts_commands(bot: commands.Bot, noah_group: commands.Group) -> None
         greet_text = random.choice(GREET_MESSAGES).format(user=_build_greet_name(member))
 
         try:
+            await asyncio.sleep(2)
+
+            refreshed_member = guild.get_member(member.id)
+            if refreshed_member is None or refreshed_member.voice is None:
+                return
+
+            if refreshed_member.voice.channel is None or refreshed_member.voice.channel.id != tracked_channel_id:
+                return
+
+            voice_client = guild.voice_client
+            if voice_client is None or not voice_client.is_connected() or voice_client.channel is None:
+                _disable_greet(bot, guild.id)
+                return
+
+            if voice_client.channel.id != tracked_channel_id:
+                _disable_greet(bot, guild.id)
+                return
+
             await _play_tts(voice_client, greet_text)
         except Exception:
             _disable_greet(bot, guild.id)
