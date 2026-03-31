@@ -1,5 +1,6 @@
 import asyncio
 import os
+import random
 import re
 from io import BytesIO
 
@@ -32,6 +33,11 @@ FOOLSDAY_TESTIMAGE_URL = (
     "746423509143781376/424c75feaa629697.png"
     "?ex=69cd5890&is=69cc0710&hm=59eea5e3b93bfdf7b668a6d5e2c32559d323b339f31d89ba6ac6c034494576c8&"
 )
+FOOLSDAY_TARGET_USER_ID = 722418701852344391
+FOOLSDAY_TRIGGER_PATTERN = re.compile(
+    r"^A (waifu|husbando) appeared!$",
+    re.IGNORECASE,
+)
 
 
 def _clone_embed_with_thumbnail(
@@ -40,6 +46,46 @@ def _clone_embed_with_thumbnail(
     embed_data = original.to_dict()
     embed_data["thumbnail"] = {"url": thumbnail_url}
     return discord.Embed.from_dict(embed_data)
+
+
+def _is_foolsday_target_message(message: discord.Message) -> bool:
+    if message.author.id != FOOLSDAY_TARGET_USER_ID or not message.embeds:
+        return False
+
+    first_embed = message.embeds[0]
+    description = (first_embed.description or "").strip()
+    return bool(FOOLSDAY_TRIGGER_PATTERN.match(description))
+
+
+async def _replace_message_with_foolsday_image(
+    message: discord.Message,
+    thumbnail_url: str = FOOLSDAY_TESTIMAGE_URL,
+) -> bool:
+    if not message.embeds:
+        return False
+
+    updated_embeds = [
+        _clone_embed_with_thumbnail(message.embeds[0], thumbnail_url),
+        *[
+            discord.Embed.from_dict(embed.to_dict())
+            for embed in message.embeds[1:]
+        ],
+    ]
+
+    try:
+        await message.channel.send(
+            content=message.content or None,
+            embeds=updated_embeds,
+        )
+    except (discord.Forbidden, discord.HTTPException):
+        return False
+
+    try:
+        await message.delete()
+    except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+        pass
+
+    return True
 
 
 def register_noah_commands(bot: commands.Bot) -> None:
@@ -347,7 +393,10 @@ def register_noah_commands(bot: commands.Bot) -> None:
     @noah.group()
     async def foolsday(ctx: commands.Context) -> None:
         if ctx.invoked_subcommand is None:
-            await ctx.send("Use `.noah foolsday testimage` replying to an embed.")
+            await ctx.send(
+                "Use `.noah foolsday testimage`, `.noah foolsday activate`, "
+                "`.noah foolsday disable` or `.noah foolsday forcenext`."
+            )
 
     @foolsday.command()
     async def testimage(ctx: commands.Context) -> None:
@@ -367,70 +416,70 @@ def register_noah_commands(bot: commands.Bot) -> None:
             await ctx.send("❌ The replied message does not contain an embed.")
             return
 
-        context = get_bot_context(ctx.bot)
-        context.foolsday_testimage_targets[replied_msg.id] = FOOLSDAY_TESTIMAGE_URL
-
-        try:
-            await replied_msg.add_reaction("🖼️")
-        except discord.HTTPException:
-            pass
+        success = await _replace_message_with_foolsday_image(replied_msg)
 
         try:
             await ctx.message.delete()
         except (discord.Forbidden, discord.NotFound, discord.HTTPException):
             pass
 
-    @bot.listen("on_raw_reaction_add")
-    async def _handle_foolsday_testimage(
-        payload: discord.RawReactionActionEvent,
-    ) -> None:
-        if bot.user is None or payload.user_id == bot.user.id:
+        if not success:
+            await ctx.send("❌ I couldn't resend that embed.")
+
+    @foolsday.command()
+    async def activate(ctx: commands.Context) -> None:
+        if ctx.guild is None:
+            await ctx.send("❌ This command can only be used in a server.")
+            return
+
+        context = get_bot_context(ctx.bot)
+        context.foolsday_active_guilds.add(ctx.guild.id)
+        await ctx.send("🃏 Foolsday auto-prank activated for this server.")
+
+    @foolsday.command()
+    async def disable(ctx: commands.Context) -> None:
+        if ctx.guild is None:
+            await ctx.send("❌ This command can only be used in a server.")
+            return
+
+        context = get_bot_context(ctx.bot)
+        context.foolsday_active_guilds.discard(ctx.guild.id)
+        context.foolsday_force_next_guilds.discard(ctx.guild.id)
+        await ctx.send("🛑 Foolsday auto-prank disabled for this server.")
+
+    @foolsday.command()
+    async def forcenext(ctx: commands.Context) -> None:
+        if ctx.guild is None:
+            await ctx.send("❌ This command can only be used in a server.")
+            return
+
+        context = get_bot_context(ctx.bot)
+        context.foolsday_force_next_guilds.add(ctx.guild.id)
+        await ctx.send("🎯 The next detected waifu/husbando embed will be pranked.")
+
+    @bot.listen("on_message")
+    async def _handle_foolsday_auto_prank(message: discord.Message) -> None:
+        if message.author.bot is False:
+            return
+
+        if message.guild is None or not _is_foolsday_target_message(message):
             return
 
         context = get_bot_context(bot)
-        thumbnail_url = context.foolsday_testimage_targets.pop(payload.message_id, None)
-        if thumbnail_url is None:
+        guild_id = message.guild.id
+        forced = guild_id in context.foolsday_force_next_guilds
+        active = guild_id in context.foolsday_active_guilds
+
+        if not forced and not active:
             return
 
-        channel = bot.get_channel(payload.channel_id)
-        if channel is None:
-            try:
-                channel = await bot.fetch_channel(payload.channel_id)
-            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                return
-
-        if not isinstance(channel, (discord.TextChannel, discord.Thread)):
+        should_prank = forced or random.randint(1, 33) == 1
+        if not should_prank:
             return
 
-        try:
-            original_message = await channel.fetch_message(payload.message_id)
-        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-            return
-
-        if not original_message.embeds:
-            return
-
-        updated_embeds = [
-            _clone_embed_with_thumbnail(original_message.embeds[0], thumbnail_url),
-            *[
-                discord.Embed.from_dict(embed.to_dict())
-                for embed in original_message.embeds[1:]
-            ],
-        ]
-
-        try:
-            await channel.send(
-                content=original_message.content or None,
-                embeds=updated_embeds,
-            )
-        except (discord.Forbidden, discord.HTTPException):
-            context.foolsday_testimage_targets[payload.message_id] = thumbnail_url
-            return
-
-        try:
-            await original_message.delete()
-        except (discord.Forbidden, discord.NotFound, discord.HTTPException):
-            pass
+        success = await _replace_message_with_foolsday_image(message)
+        if forced and success:
+            context.foolsday_force_next_guilds.discard(guild_id)
 
     register_waifu_commands(noah)
     register_relics_commands(bot, noah)
