@@ -27,6 +27,21 @@ def _truncate_discord_message(content: str) -> str:
     return content
 
 
+FOOLSDAY_TESTIMAGE_URL = (
+    "https://cdn.discordapp.com/attachments/730781186883846154/"
+    "746423509143781376/424c75feaa629697.png"
+    "?ex=69cd5890&is=69cc0710&hm=59eea5e3b93bfdf7b668a6d5e2c32559d323b339f31d89ba6ac6c034494576c8&"
+)
+
+
+def _clone_embed_with_thumbnail(
+    original: discord.Embed, thumbnail_url: str
+) -> discord.Embed:
+    embed_data = original.to_dict()
+    embed_data["thumbnail"] = {"url": thumbnail_url}
+    return discord.Embed.from_dict(embed_data)
+
+
 def register_noah_commands(bot: commands.Bot) -> None:
     @bot.group()
     async def noah(ctx: commands.Context) -> None:
@@ -328,6 +343,94 @@ def register_noah_commands(bot: commands.Bot) -> None:
             message += f"\n⚠ Could not modify: {', '.join(failed)}"
 
         await ctx.send(message)
+
+    @noah.group()
+    async def foolsday(ctx: commands.Context) -> None:
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Use `.noah foolsday testimage` replying to an embed.")
+
+    @foolsday.command()
+    async def testimage(ctx: commands.Context) -> None:
+        if not ctx.message.reference or ctx.message.reference.message_id is None:
+            await ctx.send("❌ Reply to an embed message first.")
+            return
+
+        try:
+            replied_msg = await ctx.channel.fetch_message(
+                ctx.message.reference.message_id
+            )
+        except discord.NotFound:
+            await ctx.send("❌ Original message not found.")
+            return
+
+        if not replied_msg.embeds:
+            await ctx.send("❌ The replied message does not contain an embed.")
+            return
+
+        context = get_bot_context(ctx.bot)
+        context.foolsday_testimage_targets[replied_msg.id] = FOOLSDAY_TESTIMAGE_URL
+
+        try:
+            await replied_msg.add_reaction("🖼️")
+        except discord.HTTPException:
+            pass
+
+        try:
+            await ctx.message.delete()
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+            pass
+
+    @bot.listen("on_raw_reaction_add")
+    async def _handle_foolsday_testimage(
+        payload: discord.RawReactionActionEvent,
+    ) -> None:
+        if bot.user is None or payload.user_id == bot.user.id:
+            return
+
+        context = get_bot_context(bot)
+        thumbnail_url = context.foolsday_testimage_targets.pop(payload.message_id, None)
+        if thumbnail_url is None:
+            return
+
+        channel = bot.get_channel(payload.channel_id)
+        if channel is None:
+            try:
+                channel = await bot.fetch_channel(payload.channel_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                return
+
+        if not isinstance(channel, (discord.TextChannel, discord.Thread)):
+            return
+
+        try:
+            original_message = await channel.fetch_message(payload.message_id)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            return
+
+        if not original_message.embeds:
+            return
+
+        updated_embeds = [
+            _clone_embed_with_thumbnail(original_message.embeds[0], thumbnail_url),
+            *[
+                discord.Embed.from_dict(embed.to_dict())
+                for embed in original_message.embeds[1:]
+            ],
+        ]
+
+        try:
+            await channel.send(
+                content=original_message.content or None,
+                embeds=updated_embeds,
+            )
+        except (discord.Forbidden, discord.HTTPException):
+            context.foolsday_testimage_targets[payload.message_id] = thumbnail_url
+            return
+
+        try:
+            await original_message.delete()
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+            pass
 
     register_waifu_commands(noah)
     register_relics_commands(bot, noah)
