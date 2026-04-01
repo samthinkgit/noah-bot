@@ -33,6 +33,7 @@ FOOLSDAY_TESTIMAGE_URL = (
     "746423509143781376/424c75feaa629697.png"
     "?ex=69cd5890&is=69cc0710&hm=59eea5e3b93bfdf7b668a6d5e2c32559d323b339f31d89ba6ac6c034494576c8&"
 )
+FOOLSDAY_EMBED_COLOR = 0x94EBFF
 FOOLSDAY_TARGET_USER_ID = 722418701852344391
 FOOLSDAY_TRIGGER_PATTERN = re.compile(
     r"husbando appeared",
@@ -45,6 +46,7 @@ def _clone_embed_with_thumbnail(
 ) -> discord.Embed:
     embed_data = original.to_dict()
     embed_data["thumbnail"] = {"url": thumbnail_url}
+    embed_data["color"] = FOOLSDAY_EMBED_COLOR
     return discord.Embed.from_dict(embed_data)
 
 
