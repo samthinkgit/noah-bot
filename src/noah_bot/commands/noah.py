@@ -35,7 +35,7 @@ FOOLSDAY_TESTIMAGE_URL = (
 )
 FOOLSDAY_TARGET_USER_ID = 722418701852344391
 FOOLSDAY_TRIGGER_PATTERN = re.compile(
-    r"^A (waifu|husbando) appeared!$",
+    r"husbando appeared",
     re.IGNORECASE,
 )
 
@@ -54,7 +54,7 @@ def _is_foolsday_target_message(message: discord.Message) -> bool:
 
     first_embed = message.embeds[0]
     description = (first_embed.description or "").strip()
-    return bool(FOOLSDAY_TRIGGER_PATTERN.match(description))
+    return bool(FOOLSDAY_TRIGGER_PATTERN.search(description))
 
 
 async def _replace_message_with_foolsday_image(
