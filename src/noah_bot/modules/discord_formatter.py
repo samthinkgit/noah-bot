@@ -64,7 +64,7 @@ class WaifuClaimFormatter:
             title="🎉 Waifu Claimed!",
             description=(
                 f"**Congrats {user.mention}**\n"
-                f"You just claimed **[{rarity_symbol}] {waifu_name}** "
+                f"You claimed **[{rarity_symbol}] {waifu_name}** "
                 f"in just `{claim_time_seconds:.3f}s`!."
             ),
             color=discord.Color.pink(),
