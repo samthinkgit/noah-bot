@@ -49,6 +49,7 @@ class WaifuClaimFormatter:
         user: discord.Member | discord.User,
         waifu_name: str,
         rarity_symbol: str,
+        claim_time_seconds: float,
     ) -> discord.Embed:
         """
         Builds a 'Waifu Claimed' embed.
@@ -56,13 +57,15 @@ class WaifuClaimFormatter:
         :param user: User who claimed the waifu
         :param waifu_name: Name of the claimed waifu
         :param rarity_symbol: Rarity symbol (e.g. δ, ★, S)
+        :param claim_time_seconds: Claim time in seconds
         """
 
         embed = discord.Embed(
             title="🎉 Waifu Claimed!",
             description=(
-                f"**Congrats {user.mention}!**\n"
-                f"You were the **fastest** to claim **[{rarity_symbol}] {waifu_name}**.\n"
+                f"**Congrats {user.mention}**\n"
+                f"You just claimed **[{rarity_symbol}] {waifu_name}** "
+                f"in just `{claim_time_seconds:.3f}s`!."
             ),
             color=discord.Color.pink(),
         )

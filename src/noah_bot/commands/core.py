@@ -130,11 +130,16 @@ def register_core_commands(bot: commands.Bot) -> None:
         user = message.mentions[0] if message.mentions else None
         if not user:
             return
+        context = get_bot_context(bot)
+        claim_time_seconds = 0.0
+        if context.latest_time_it is not None:
+            claim_time_seconds = time.time() - context.latest_time_it
 
         embed = WaifuClaimFormatter.build_embed(
             user=user,
             waifu_name=waifu_name,
             rarity_symbol=rarity_symbol,
+            claim_time_seconds=claim_time_seconds,
         )
 
         await message.channel.send(embed=embed)

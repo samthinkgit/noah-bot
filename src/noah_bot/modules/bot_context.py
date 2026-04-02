@@ -24,8 +24,6 @@ class BotContext:
     relics_manager: RelicsGameManager = field(
         default_factory=lambda: RelicsGameManager(json_path="noah_relics.json")
     )
-    foolsday_active_guilds: set[int] = field(default_factory=set)
-    foolsday_force_next_guilds: set[int] = field(default_factory=set)
     tts_greet_sessions: dict[int, int] = field(default_factory=dict)
     timeit_sessions: dict[int, float] = field(default_factory=dict)
     latest_time_it: float | None = None

@@ -1,8 +1,8 @@
 import asyncio
 import os
-import random
 import re
 from io import BytesIO
+import time
 
 import discord
 from discord.ext import commands
@@ -28,66 +28,20 @@ def _truncate_discord_message(content: str) -> str:
     return content
 
 
-FOOLSDAY_TESTIMAGE_URL = (
-    "https://cdn.discordapp.com/attachments/730781186883846154/"
-    "746423509143781376/424c75feaa629697.png"
-    "?ex=69cd5890&is=69cc0710&hm=59eea5e3b93bfdf7b668a6d5e2c32559d323b339f31d89ba6ac6c034494576c8&"
-)
-FOOLSDAY_EMBED_COLOR = 0x94EBFF
-FOOLSDAY_TARGET_USER_ID = 722418701852344391
-FOOLSDAY_TRIGGER_PATTERN = re.compile(
+WAIFUGAMI_BOT_USER_ID = 722418701852344391
+HUSBANDO_TRIGGER_PATTERN = re.compile(
     r"husbando appeared",
     re.IGNORECASE,
 )
 
 
-def _clone_embed_with_thumbnail(
-    original: discord.Embed, thumbnail_url: str
-) -> discord.Embed:
-    embed_data = original.to_dict()
-    embed_data["thumbnail"] = {"url": thumbnail_url}
-    embed_data["color"] = FOOLSDAY_EMBED_COLOR
-    return discord.Embed.from_dict(embed_data)
-
-
-def _is_foolsday_target_message(message: discord.Message) -> bool:
-    if message.author.id != FOOLSDAY_TARGET_USER_ID or not message.embeds:
+def _is_husbando_spawn_message(message: discord.Message) -> bool:
+    if message.author.id != WAIFUGAMI_BOT_USER_ID or not message.embeds:
         return False
 
     first_embed = message.embeds[0]
     description = (first_embed.description or "").strip()
-    return bool(FOOLSDAY_TRIGGER_PATTERN.search(description))
-
-
-async def _replace_message_with_foolsday_image(
-    message: discord.Message,
-    thumbnail_url: str = FOOLSDAY_TESTIMAGE_URL,
-) -> bool:
-    if not message.embeds:
-        return False
-
-    updated_embeds = [
-        _clone_embed_with_thumbnail(message.embeds[0], thumbnail_url),
-        *[
-            discord.Embed.from_dict(embed.to_dict())
-            for embed in message.embeds[1:]
-        ],
-    ]
-
-    try:
-        await message.channel.send(
-            content=message.content or None,
-            embeds=updated_embeds,
-        )
-    except (discord.Forbidden, discord.HTTPException):
-        return False
-
-    try:
-        await message.delete()
-    except (discord.Forbidden, discord.NotFound, discord.HTTPException):
-        pass
-
-    return True
+    return bool(HUSBANDO_TRIGGER_PATTERN.search(description))
 
 
 def register_noah_commands(bot: commands.Bot) -> None:
@@ -392,96 +346,16 @@ def register_noah_commands(bot: commands.Bot) -> None:
 
         await ctx.send(message)
 
-    @noah.group()
-    async def foolsday(ctx: commands.Context) -> None:
-        if ctx.invoked_subcommand is None:
-            await ctx.send(
-                "Use `.noah foolsday testimage`, `.noah foolsday activate`, "
-                "`.noah foolsday disable` or `.noah foolsday forcenext`."
-            )
-
-    @foolsday.command()
-    async def testimage(ctx: commands.Context) -> None:
-        if not ctx.message.reference or ctx.message.reference.message_id is None:
-            await ctx.send("❌ Reply to an embed message first.")
-            return
-
-        try:
-            replied_msg = await ctx.channel.fetch_message(
-                ctx.message.reference.message_id
-            )
-        except discord.NotFound:
-            await ctx.send("❌ Original message not found.")
-            return
-
-        if not replied_msg.embeds:
-            await ctx.send("❌ The replied message does not contain an embed.")
-            return
-
-        success = await _replace_message_with_foolsday_image(replied_msg)
-
-        try:
-            await ctx.message.delete()
-        except (discord.Forbidden, discord.NotFound, discord.HTTPException):
-            pass
-
-        if not success:
-            await ctx.send("❌ I couldn't resend that embed.")
-
-    @foolsday.command()
-    async def activate(ctx: commands.Context) -> None:
-        if ctx.guild is None:
-            await ctx.send("❌ This command can only be used in a server.")
-            return
-
-        context = get_bot_context(ctx.bot)
-        context.foolsday_active_guilds.add(ctx.guild.id)
-        await ctx.send("🃏 Foolsday auto-prank activated for this server.")
-
-    @foolsday.command()
-    async def disable(ctx: commands.Context) -> None:
-        if ctx.guild is None:
-            await ctx.send("❌ This command can only be used in a server.")
-            return
-
-        context = get_bot_context(ctx.bot)
-        context.foolsday_active_guilds.discard(ctx.guild.id)
-        context.foolsday_force_next_guilds.discard(ctx.guild.id)
-        await ctx.send("🛑 Foolsday auto-prank disabled for this server.")
-
-    @foolsday.command()
-    async def forcenext(ctx: commands.Context) -> None:
-        if ctx.guild is None:
-            await ctx.send("❌ This command can only be used in a server.")
-            return
-
-        context = get_bot_context(ctx.bot)
-        context.foolsday_force_next_guilds.add(ctx.guild.id)
-        await ctx.send("🎯 The next detected waifu/husbando embed will be pranked.")
-
     @bot.listen("on_message")
-    async def _handle_foolsday_auto_prank(message: discord.Message) -> None:
+    async def _handle_husbando_spawn_timer(message: discord.Message) -> None:
         if message.author.bot is False:
             return
 
-        if message.guild is None or not _is_foolsday_target_message(message):
+        if message.guild is None or not _is_husbando_spawn_message(message):
             return
 
         context = get_bot_context(bot)
-        guild_id = message.guild.id
-        forced = guild_id in context.foolsday_force_next_guilds
-        active = guild_id in context.foolsday_active_guilds
-
-        if not forced and not active:
-            return
-
-        should_prank = forced or random.randint(1, 33) == 1
-        if not should_prank:
-            return
-
-        success = await _replace_message_with_foolsday_image(message)
-        if forced and success:
-            context.foolsday_force_next_guilds.discard(guild_id)
+        context.latest_time_it = time.time()
 
     register_waifu_commands(noah)
     register_relics_commands(bot, noah)
