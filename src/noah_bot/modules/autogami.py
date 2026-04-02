@@ -142,3 +142,34 @@ class AutogamiTokenStore:
         if not isinstance(token, str) or not token.strip():
             return None
         return token
+
+    def add_favorite_emoji(self, user_id: int, emoji: str) -> bool:
+        sanitized_emoji = emoji.strip()
+        if not sanitized_emoji:
+            return False
+
+        user_data = self._users.get(self._user_key(user_id), {})
+        favorites = user_data.get("favorite_emojis")
+        if not isinstance(favorites, list):
+            favorites = []
+
+        if sanitized_emoji in favorites:
+            return False
+
+        favorites.append(sanitized_emoji)
+        user_data["favorite_emojis"] = favorites
+        user_data["updated_at"] = _utc_now_iso()
+        self._users[self._user_key(user_id)] = user_data
+        self._save()
+        return True
+
+    def get_favorite_emojis(self, user_id: int) -> list[str]:
+        user_data = self._users.get(self._user_key(user_id))
+        if not isinstance(user_data, dict):
+            return []
+
+        favorites = user_data.get("favorite_emojis")
+        if not isinstance(favorites, list):
+            return []
+
+        return [emoji for emoji in favorites if isinstance(emoji, str) and emoji.strip()]

@@ -35,6 +35,16 @@ def _build_autogami_help_embed() -> discord.Embed:
         value="Envia `test success` usando tu token sincronizado.",
         inline=False,
     )
+    embed.add_field(
+        name=".noah autogami addfav <emoji>",
+        value="Guarda un emoji favorito para reaccionar a los `Waifu Claimed!`.",
+        inline=False,
+    )
+    embed.add_field(
+        name=".noah autogami showfavs",
+        value="Muestra todos tus emojis favoritos guardados.",
+        inline=False,
+    )
     return embed
 
 
@@ -77,10 +87,12 @@ async def _request_sync_consent(ctx: commands.Context) -> bool:
     consent_message = await ctx.send(
         "\n".join(
             [
-                f"{ctx.author.mention} antes de guardar tu token necesito tu confirmación:",
-                "- No puedo leer tus mensajes",
-                "- No puedo enviar mensajes sin tu consentimiento",
-                "- Noah puede usar solo mensajes específicos para automatizaciones de Autogami",
+                f"{ctx.author.mention} antes de guardar tu token debes ser consciente de que Noah no puede:",
+                "- Leer tus mensajes privados o usar tu cuenta para espiar conversaciones",
+                "- Enviar mensajes por su cuenta sin una acción o consentimiento tuyo",
+                "- Usar tu token para otra cosa que no sean automatizaciones concretas de Autogami",
+                "",
+                "Y Noah solo puede usar mensajes específicos que tú decidas automatizar con Autogami.",
                 "",
                 f"Reacciona con {CONSENT_ACCEPT_EMOJI} para aceptar o con {CONSENT_DECLINE_EMOJI} para cancelar.",
             ]
@@ -201,4 +213,29 @@ def register_autogami_commands(noah_group: commands.Group) -> None:
         error_body = body[:300] if body else "sin respuesta"
         await ctx.send(
             f"❌ El test de Autogami falló con estado HTTP {status}: {error_body}"
+        )
+
+    @autogami.command()
+    async def addfav(ctx: commands.Context, emoji: str) -> None:
+        context = get_bot_context(ctx.bot)
+        added = context.autogami_tokens.add_favorite_emoji(ctx.author.id, emoji)
+        if added:
+            await ctx.send(f"{ctx.author.mention} he guardado `{emoji}` en tus favs de Autogami.")
+            return
+
+        await ctx.send(f"{ctx.author.mention} `{emoji}` ya estaba en tus favs de Autogami.")
+
+    @autogami.command()
+    async def showfavs(ctx: commands.Context) -> None:
+        context = get_bot_context(ctx.bot)
+        favorites = context.autogami_tokens.get_favorite_emojis(ctx.author.id)
+        if not favorites:
+            await ctx.send(
+                f"{ctx.author.mention} no tienes favs guardados todavía. Usa `.noah autogami addfav <emoji>`."
+            )
+            return
+
+        favorites_text = " ".join(favorites)
+        await ctx.send(
+            f"{ctx.author.mention} tus favs de Autogami son: {favorites_text}"
         )

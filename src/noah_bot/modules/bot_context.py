@@ -26,6 +26,7 @@ class BotContext:
     relics_manager: RelicsGameManager = field(
         default_factory=lambda: RelicsGameManager(json_path="noah_relics.json")
     )
+    autogami_claim_messages: dict[int, int] = field(default_factory=dict)
     tts_greet_sessions: dict[int, int] = field(default_factory=dict)
     timeit_sessions: dict[int, float] = field(default_factory=dict)
     latest_time_it: float | None = None

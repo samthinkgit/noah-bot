@@ -1,3 +1,4 @@
+import asyncio
 import re
 import time
 from io import BytesIO
@@ -8,6 +9,7 @@ from rich import inspect
 
 from noah_bot.modules.bot_context import get_bot_context
 from noah_bot.modules.discord_formatter import WaifuClaimFormatter
+from noah_bot.modules.send_message import send_message
 from noah_bot.modules.jarvis import create_jarvis_gif
 
 CLAIM_REGEX = re.compile(
@@ -142,7 +144,14 @@ def register_core_commands(bot: commands.Bot) -> None:
             claim_time_seconds=claim_time_seconds,
         )
 
-        await message.channel.send(embed=embed)
+        claim_message = await message.channel.send(embed=embed)
+        context.autogami_claim_messages[claim_message.id] = user.id
+
+        for favorite_emoji in context.autogami_tokens.get_favorite_emojis(user.id):
+            try:
+                await claim_message.add_reaction(favorite_emoji)
+            except discord.HTTPException:
+                continue
 
         try:
             await message.delete()
@@ -150,3 +159,40 @@ def register_core_commands(bot: commands.Bot) -> None:
             pass
         except discord.NotFound:
             pass
+
+    @bot.event
+    async def on_reaction_add(
+        reaction: discord.Reaction,
+        user: discord.User | discord.Member,
+    ) -> None:
+        if user.bot:
+            return
+
+        message = reaction.message
+        if bot.user is None or message.author.id != bot.user.id:
+            return
+
+        context = get_bot_context(bot)
+        claimer_id = context.autogami_claim_messages.get(message.id)
+        if claimer_id is None or user.id != claimer_id:
+            return
+
+        favorite_emoji = str(reaction.emoji)
+        if favorite_emoji not in context.autogami_tokens.get_favorite_emojis(user.id):
+            return
+
+        token = context.autogami_tokens.get_token(user.id)
+        if token is None or message.guild is None:
+            return
+
+        try:
+            await asyncio.to_thread(
+                send_message,
+                f".favl {favorite_emoji}",
+                token,
+                str(user.id),
+                str(message.guild.id),
+                str(message.channel.id),
+            )
+        except Exception:
+            return
