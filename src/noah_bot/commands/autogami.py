@@ -9,7 +9,7 @@ from noah_bot.modules.send_message import send_message
 
 
 MEDIA_DIR = Path(__file__).resolve().parents[3] / "media"
-TOKEN_GETTER_ZIP = MEDIA_DIR / "autogami_token_getter.zip"
+TOKEN_GETTER_ARCHIVE = MEDIA_DIR / "autogami_token_getter.rar"
 CONSENT_ACCEPT_EMOJI = "✅"
 CONSENT_DECLINE_EMOJI = "❌"
 
@@ -22,7 +22,7 @@ def _build_autogami_help_embed() -> discord.Embed:
     )
     embed.add_field(
         name=".noah autogami sync",
-        value="Recibe instrucciones y el ZIP para sacar tu token.",
+        value="Recibe instrucciones y el RAR para sacar tu token.",
         inline=False,
     )
     embed.add_field(
@@ -41,22 +41,22 @@ def _build_autogami_help_embed() -> discord.Embed:
 async def _send_sync_instructions(ctx: commands.Context) -> None:
     lines = [
         f"{ctx.author.mention} sigue estos pasos para sincronizar Autogami:",
-        "1. Descarga el ZIP adjunto.",
+        "1. Descarga el RAR adjunto.",
         "2. Extráelo en cualquier carpeta de tu PC.",
         "3. Ejecuta `token_getter.exe`.",
         "4. Copia el token obtenido.",
         "5. Usa `.noah autogami sync <token>` para guardarlo.",
     ]
 
-    if not TOKEN_GETTER_ZIP.exists():
+    if not TOKEN_GETTER_ARCHIVE.exists():
         await ctx.send(
-            "❌ No encuentro `media/autogami_token_getter.zip`, así que no puedo enviarte el asistente ahora mismo."
+            "❌ No encuentro `media/autogami_token_getter.rar`, así que no puedo enviarte el asistente ahora mismo."
         )
         return
 
     await ctx.send(
         "\n".join(lines),
-        file=discord.File(TOKEN_GETTER_ZIP, filename=TOKEN_GETTER_ZIP.name),
+        file=discord.File(TOKEN_GETTER_ARCHIVE, filename=TOKEN_GETTER_ARCHIVE.name),
     )
 
 
