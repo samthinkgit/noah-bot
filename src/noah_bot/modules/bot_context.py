@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from discord.ext import commands
 
 from noah_bot.modules.ai import AiResponder
+from noah_bot.modules.autogami import AutogamiTokenStore
 from noah_bot.modules.discord_formatter import UserEmojiManager
 from noah_bot.modules.leaderboard import Leaderboard
 from noah_bot.modules.relics_game import RelicsGameManager
@@ -17,6 +18,7 @@ class BotContext:
     emoji_manager: UserEmojiManager = field(default_factory=UserEmojiManager)
     ai_responder: AiResponder = field(default_factory=AiResponder)
     steallist: StealList = field(default_factory=StealList)
+    autogami_tokens: AutogamiTokenStore = field(default_factory=AutogamiTokenStore)
     voice_manager: VoiceManager = field(default_factory=VoiceManager)
     waifu_manager: WaifuGameManager = field(
         default_factory=lambda: WaifuGameManager(json_path="waifu_game.json")
