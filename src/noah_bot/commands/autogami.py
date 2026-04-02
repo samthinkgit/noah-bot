@@ -12,6 +12,8 @@ MEDIA_DIR = Path(__file__).resolve().parents[3] / "media"
 TOKEN_GETTER_ARCHIVE = MEDIA_DIR / "autogami_token_getter.rar"
 CONSENT_ACCEPT_EMOJI = "✅"
 CONSENT_DECLINE_EMOJI = "❌"
+AUTOGAMI_V_BATCH_SIZE = 5
+AUTOGAMI_V_DELAY_SECONDS = 6
 
 
 def _build_autogami_help_embed() -> discord.Embed:
@@ -43,6 +45,11 @@ def _build_autogami_help_embed() -> discord.Embed:
     embed.add_field(
         name=".noah autogami showfavs",
         value="Muestra todos tus emojis favoritos guardados.",
+        inline=False,
+    )
+    embed.add_field(
+        name=".noah autogami v <num> <num> ...",
+        value="Envia `.v` en tandas de 5 con 6s de espera entre cada tanda.",
         inline=False,
     )
     return embed
@@ -149,6 +156,24 @@ async def _send_autogami_test(ctx: commands.Context, token: str) -> tuple[int, s
     )
 
 
+async def _send_autogami_message(
+    ctx: commands.Context,
+    token: str,
+    message: str,
+) -> tuple[int, str]:
+    if ctx.guild is None:
+        raise RuntimeError("Autogami requires a guild channel.")
+
+    return await asyncio.to_thread(
+        send_message,
+        message,
+        token,
+        str(ctx.author.id),
+        str(ctx.guild.id),
+        str(ctx.channel.id),
+    )
+
+
 def register_autogami_commands(noah_group: commands.Group) -> None:
     @noah_group.group()
     async def autogami(ctx: commands.Context) -> None:
@@ -238,4 +263,64 @@ def register_autogami_commands(noah_group: commands.Group) -> None:
         favorites_text = " ".join(favorites)
         await ctx.send(
             f"{ctx.author.mention} tus favs de Autogami son: {favorites_text}"
+        )
+
+    @autogami.command(name="v")
+    async def autogami_v(ctx: commands.Context, *numbers: str) -> None:
+        if ctx.guild is None:
+            await ctx.send("❌ Este comando solo funciona dentro de un servidor.")
+            return
+
+        if not numbers:
+            await ctx.send(
+                "❌ Usa `.noah autogami v <num> <num> <num> ...`."
+            )
+            return
+
+        sanitized_numbers = [value.strip() for value in numbers if value.strip()]
+        if not sanitized_numbers:
+            await ctx.send(
+                "❌ No has indicado números válidos para enviar con `.v`."
+            )
+            return
+
+        context = get_bot_context(ctx.bot)
+        token = context.autogami_tokens.get_token(ctx.author.id)
+        if token is None:
+            await ctx.send(
+                "❌ No tienes un token sincronizado. Usa `.noah autogami sync` primero."
+            )
+            return
+
+        batches = [
+            sanitized_numbers[index : index + AUTOGAMI_V_BATCH_SIZE]
+            for index in range(0, len(sanitized_numbers), AUTOGAMI_V_BATCH_SIZE)
+        ]
+
+        await ctx.send(
+            f"{ctx.author.mention} voy a enviar {len(batches)} tanda(s) de `.v` con {AUTOGAMI_V_DELAY_SECONDS}s de espera entre ellas."
+        )
+
+        for index, batch in enumerate(batches, start=1):
+            command_text = f".v {' '.join(batch)}"
+            try:
+                status, body = await _send_autogami_message(ctx, token, command_text)
+            except Exception as exc:
+                await ctx.send(
+                    f"❌ Falló la tanda {index}/{len(batches)} (`{command_text}`): {exc}"
+                )
+                return
+
+            if not 200 <= status < 300:
+                error_body = body[:300] if body else "sin respuesta"
+                await ctx.send(
+                    f"❌ La tanda {index}/{len(batches)} falló con HTTP {status}: {error_body}"
+                )
+                return
+
+            if index < len(batches):
+                await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
+
+        await ctx.send(
+            f"✅ {ctx.author.mention} he enviado {len(batches)} tanda(s) de `.v` correctamente."
         )
