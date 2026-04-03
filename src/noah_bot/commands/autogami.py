@@ -58,7 +58,7 @@ def _build_autogami_help_embed() -> discord.Embed:
     )
     embed.add_field(
         name=".noah autogami v <num> <num> ... [-merge] [-silent]",
-        value="Envia `.v` en tandas de 5 con 6s de espera entre cada tanda. Alias: `.nv`. `-silent` requiere `-merge`.",
+        value="Envia `.v` en tandas de 5 con 6s de espera entre cada tanda. Alias: `.nv`, `.nvms`. `-silent` requiere `-merge`.",
         inline=False,
     )
     return embed
@@ -541,3 +541,7 @@ def register_autogami_commands(bot: commands.Bot, noah_group: commands.Group) ->
     @bot.command(name="nv")
     async def autogami_v_alias(ctx: commands.Context, *values: str) -> None:
         await _run_autogami_v(ctx, values)
+
+    @bot.command(name="nvms")
+    async def autogami_v_merge_silent_alias(ctx: commands.Context, *values: str) -> None:
+        await _run_autogami_v(ctx, (*values, "-merge", "-silent"))
