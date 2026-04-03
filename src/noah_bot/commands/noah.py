@@ -1,7 +1,6 @@
 import asyncio
 import os
 import re
-from io import BytesIO
 import time
 
 import discord
@@ -14,12 +13,12 @@ from noah_bot.commands.vc_stats import register_vc_stats_commands
 from noah_bot.commands.waifu import register_waifu_commands
 from noah_bot.modules.bot_context import get_bot_context
 from noah_bot.modules.discord_formatter import (
-    DiscordImageRenderer,
     EmbedTable,
     RARITY_COLORS,
     RARITY_DISPLAY,
     RARITY_SYMBOLS,
     _parse_embed_metadata,
+    render_embeds_to_png,
 )
 
 
@@ -144,30 +143,10 @@ def register_noah_commands(bot: commands.Bot) -> None:
             await ctx.send("❌ Original message not found.")
             return
 
-        images = []
-
-        for index, embed in enumerate(replied_msg.embeds, start=1):
-            meta = _parse_embed_metadata(embed)
-
-            if embed.image and embed.image.url:
-                images.append(
-                    {
-                        "title": embed.title or f"Image {index}",
-                        "url": embed.image.url,
-                        "meta": meta,
-                    }
-                )
-
-        if not images:
+        buffer = render_embeds_to_png(replied_msg.embeds)
+        if buffer is None:
             await ctx.send("❌ No images found in the embeds.")
             return
-
-        renderer = DiscordImageRenderer()
-        final_image = renderer.render(images)
-
-        buffer = BytesIO()
-        final_image.save(buffer, format="PNG")
-        buffer.seek(0)
 
         await ctx.send(file=discord.File(buffer, filename="rendered_images.png"))
 
@@ -360,7 +339,7 @@ def register_noah_commands(bot: commands.Bot) -> None:
         context.latest_time_it = time.time()
 
     register_waifu_commands(noah)
-    register_autogami_commands(noah)
+    register_autogami_commands(bot, noah)
     register_relics_commands(bot, noah)
     register_tts_commands(bot, noah)
     register_vc_stats_commands(bot, noah)

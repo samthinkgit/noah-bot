@@ -542,6 +542,38 @@ class DiscordImageRenderer:
             return None
 
 
+def collect_embed_images(embeds: list[discord.Embed]) -> list[dict]:
+    images = []
+
+    for index, embed in enumerate(embeds, start=1):
+        meta = _parse_embed_metadata(embed)
+
+        if embed.image and embed.image.url:
+            images.append(
+                {
+                    "title": embed.title or f"Image {index}",
+                    "url": embed.image.url,
+                    "meta": meta,
+                }
+            )
+
+    return images
+
+
+def render_embeds_to_png(embeds: list[discord.Embed]) -> BytesIO | None:
+    images = collect_embed_images(embeds)
+    if not images:
+        return None
+
+    renderer = DiscordImageRenderer()
+    final_image = renderer.render(images)
+
+    buffer = BytesIO()
+    final_image.save(buffer, format="PNG")
+    buffer.seek(0)
+    return buffer
+
+
 # Helper function to parse embed metadata from
 # `.v <waifu id>` from waifugami
 def _parse_embed_metadata(embed):

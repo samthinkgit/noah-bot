@@ -5,6 +5,7 @@ import discord
 from discord.ext import commands
 
 from noah_bot.modules.bot_context import get_bot_context
+from noah_bot.modules.discord_formatter import _parse_embed_metadata, render_embeds_to_png
 from noah_bot.modules.send_message import send_message
 
 
@@ -14,6 +15,8 @@ CONSENT_ACCEPT_EMOJI = "✅"
 CONSENT_DECLINE_EMOJI = "❌"
 AUTOGAMI_V_BATCH_SIZE = 5
 AUTOGAMI_V_DELAY_SECONDS = 6
+AUTOGAMI_V_RESPONSE_TIMEOUT_SECONDS = 45
+WAIFUGAMI_BOT_USER_ID = 722418701852344391
 
 
 def _build_autogami_help_embed() -> discord.Embed:
@@ -48,8 +51,8 @@ def _build_autogami_help_embed() -> discord.Embed:
         inline=False,
     )
     embed.add_field(
-        name=".noah autogami v <num> <num> ...",
-        value="Envia `.v` en tandas de 5 con 6s de espera entre cada tanda.",
+        name=".noah autogami v <num> <num> ... [-merge]",
+        value="Envia `.v` en tandas de 5 con 6s de espera entre cada tanda. Alias: `.nv`.",
         inline=False,
     )
     return embed
@@ -174,7 +177,183 @@ async def _send_autogami_message(
     )
 
 
-def register_autogami_commands(noah_group: commands.Group) -> None:
+def _normalize_waifu_identifier(value: str) -> str:
+    sanitized = value.strip()
+    if sanitized.isdigit():
+        return str(int(sanitized))
+    return sanitized.casefold()
+
+
+def _parse_autogami_v_inputs(values: tuple[str, ...]) -> tuple[list[str], set[str]]:
+    numbers: list[str] = []
+    flags: set[str] = set()
+
+    for raw_value in values:
+        value = raw_value.strip()
+        if not value:
+            continue
+
+        if value.startswith("-"):
+            flags.add(value.lower())
+            continue
+
+        numbers.append(value)
+
+    return numbers, flags
+
+
+def _response_matches_batch(message: discord.Message, batch: list[str]) -> bool:
+    if message.author.id != WAIFUGAMI_BOT_USER_ID:
+        return False
+
+    if not message.embeds or len(message.embeds) != len(batch):
+        return False
+
+    expected_ids = {_normalize_waifu_identifier(value) for value in batch}
+    local_ids = [
+        _parse_embed_metadata(embed).get("local_id")
+        for embed in message.embeds
+    ]
+    parsed_ids = {
+        _normalize_waifu_identifier(local_id)
+        for local_id in local_ids
+        if local_id
+    }
+
+    if parsed_ids:
+        return parsed_ids == expected_ids
+
+    return True
+
+
+async def _wait_for_waifugami_response(
+    ctx: commands.Context,
+    batch: list[str],
+) -> discord.Message:
+    def message_check(message: discord.Message) -> bool:
+        return (
+            message.channel.id == ctx.channel.id
+            and _response_matches_batch(message, batch)
+        )
+
+    return await ctx.bot.wait_for(
+        "message",
+        timeout=AUTOGAMI_V_RESPONSE_TIMEOUT_SECONDS,
+        check=message_check,
+    )
+
+
+async def _send_autogami_merged_batches(
+    ctx: commands.Context,
+    captured_batches: list[tuple[list[str], discord.Message]],
+) -> None:
+    for index, (batch, response_message) in enumerate(captured_batches, start=1):
+        buffer = await asyncio.to_thread(render_embeds_to_png, response_message.embeds)
+        if buffer is None:
+            await ctx.send(
+                f"⚠️ No pude hacer merge de la respuesta {index}/{len(captured_batches)} "
+                f"para `{'.v ' + ' '.join(batch)}` porque no encontré imágenes."
+            )
+            continue
+
+        await ctx.send(
+            content=f"Merge `{'.v ' + ' '.join(batch)}`",
+            file=discord.File(buffer, filename=f"autogami_merge_{index}.png"),
+        )
+
+
+async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> None:
+    if ctx.guild is None:
+        await ctx.send("❌ Este comando solo funciona dentro de un servidor.")
+        return
+
+    if not values:
+        await ctx.send(
+            "❌ Usa `.noah autogami v <num> <num> <num> ... [-merge]` o `.nv <num> <num> ... [-merge]`."
+        )
+        return
+
+    sanitized_numbers, flags = _parse_autogami_v_inputs(values)
+    merge_requested = "-merge" in flags
+    unknown_flags = sorted(flag for flag in flags if flag != "-merge")
+
+    if unknown_flags:
+        await ctx.send(f"❌ Flag(s) no reconocidos: {' '.join(unknown_flags)}")
+        return
+
+    if not sanitized_numbers:
+        await ctx.send(
+            "❌ No has indicado números válidos para enviar con `.v`."
+        )
+        return
+
+    context = get_bot_context(ctx.bot)
+    token = context.autogami_tokens.get_token(ctx.author.id)
+    if token is None:
+        await ctx.send(
+            "❌ No tienes un token sincronizado. Usa `.noah autogami sync` primero."
+        )
+        return
+
+    batches = [
+        sanitized_numbers[index : index + AUTOGAMI_V_BATCH_SIZE]
+        for index in range(0, len(sanitized_numbers), AUTOGAMI_V_BATCH_SIZE)
+    ]
+    captured_batches: list[tuple[list[str], discord.Message]] = []
+
+    merge_suffix = " y luego haré merge automático de cada respuesta" if merge_requested else ""
+    await ctx.send(
+        f"{ctx.author.mention} voy a enviar {len(batches)} tanda(s) de `.v` "
+        f"con {AUTOGAMI_V_DELAY_SECONDS}s de espera entre ellas{merge_suffix}."
+    )
+
+    for index, batch in enumerate(batches, start=1):
+        command_text = f".v {' '.join(batch)}"
+        try:
+            status, body = await _send_autogami_message(ctx, token, command_text)
+        except Exception as exc:
+            await ctx.send(
+                f"❌ Falló la tanda {index}/{len(batches)} (`{command_text}`): {exc}"
+            )
+            return
+
+        if not 200 <= status < 300:
+            error_body = body[:300] if body else "sin respuesta"
+            await ctx.send(
+                f"❌ La tanda {index}/{len(batches)} falló con HTTP {status}: {error_body}"
+            )
+            return
+
+        if merge_requested:
+            try:
+                waifugami_response = await _wait_for_waifugami_response(ctx, batch)
+            except asyncio.TimeoutError:
+                await ctx.send(
+                    f"❌ La tanda {index}/{len(batches)} se envió, pero no detecté la respuesta "
+                    f"de Waifugami en {AUTOGAMI_V_RESPONSE_TIMEOUT_SECONDS}s para `{command_text}`. "
+                    "Paro aquí para no desordenar los merges."
+                )
+                return
+
+            captured_batches.append((batch, waifugami_response))
+
+        if index < len(batches):
+            await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
+
+    if merge_requested and captured_batches:
+        await _send_autogami_merged_batches(ctx, captured_batches)
+        await ctx.send(
+            f"✅ {ctx.author.mention} he enviado {len(batches)} tanda(s) de `.v` y "
+            f"publicado {len(captured_batches)} merge(s)."
+        )
+        return
+
+    await ctx.send(
+        f"✅ {ctx.author.mention} he enviado {len(batches)} tanda(s) de `.v` correctamente."
+    )
+
+
+def register_autogami_commands(bot: commands.Bot, noah_group: commands.Group) -> None:
     @noah_group.group()
     async def autogami(ctx: commands.Context) -> None:
         if ctx.invoked_subcommand is None:
@@ -266,61 +445,9 @@ def register_autogami_commands(noah_group: commands.Group) -> None:
         )
 
     @autogami.command(name="v")
-    async def autogami_v(ctx: commands.Context, *numbers: str) -> None:
-        if ctx.guild is None:
-            await ctx.send("❌ Este comando solo funciona dentro de un servidor.")
-            return
+    async def autogami_v(ctx: commands.Context, *values: str) -> None:
+        await _run_autogami_v(ctx, values)
 
-        if not numbers:
-            await ctx.send(
-                "❌ Usa `.noah autogami v <num> <num> <num> ...`."
-            )
-            return
-
-        sanitized_numbers = [value.strip() for value in numbers if value.strip()]
-        if not sanitized_numbers:
-            await ctx.send(
-                "❌ No has indicado números válidos para enviar con `.v`."
-            )
-            return
-
-        context = get_bot_context(ctx.bot)
-        token = context.autogami_tokens.get_token(ctx.author.id)
-        if token is None:
-            await ctx.send(
-                "❌ No tienes un token sincronizado. Usa `.noah autogami sync` primero."
-            )
-            return
-
-        batches = [
-            sanitized_numbers[index : index + AUTOGAMI_V_BATCH_SIZE]
-            for index in range(0, len(sanitized_numbers), AUTOGAMI_V_BATCH_SIZE)
-        ]
-
-        await ctx.send(
-            f"{ctx.author.mention} voy a enviar {len(batches)} tanda(s) de `.v` con {AUTOGAMI_V_DELAY_SECONDS}s de espera entre ellas."
-        )
-
-        for index, batch in enumerate(batches, start=1):
-            command_text = f".v {' '.join(batch)}"
-            try:
-                status, body = await _send_autogami_message(ctx, token, command_text)
-            except Exception as exc:
-                await ctx.send(
-                    f"❌ Falló la tanda {index}/{len(batches)} (`{command_text}`): {exc}"
-                )
-                return
-
-            if not 200 <= status < 300:
-                error_body = body[:300] if body else "sin respuesta"
-                await ctx.send(
-                    f"❌ La tanda {index}/{len(batches)} falló con HTTP {status}: {error_body}"
-                )
-                return
-
-            if index < len(batches):
-                await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
-
-        await ctx.send(
-            f"✅ {ctx.author.mention} he enviado {len(batches)} tanda(s) de `.v` correctamente."
-        )
+    @bot.command(name="nv")
+    async def autogami_v_alias(ctx: commands.Context, *values: str) -> None:
+        await _run_autogami_v(ctx, values)
