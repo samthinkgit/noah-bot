@@ -257,7 +257,6 @@ async def _send_autogami_merged_batches(
             continue
 
         await ctx.send(
-            content=f"Merge `{'.v ' + ' '.join(batch)}`",
             file=discord.File(buffer, filename=f"autogami_merge_{index}.png"),
         )
 
@@ -301,12 +300,6 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
     ]
     captured_batches: list[tuple[list[str], discord.Message]] = []
 
-    merge_suffix = " y luego haré merge automático de cada respuesta" if merge_requested else ""
-    await ctx.send(
-        f"{ctx.author.mention} voy a enviar {len(batches)} tanda(s) de `.v` "
-        f"con {AUTOGAMI_V_DELAY_SECONDS}s de espera entre ellas{merge_suffix}."
-    )
-
     for index, batch in enumerate(batches, start=1):
         command_text = f".v {' '.join(batch)}"
         try:
@@ -342,15 +335,6 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
 
     if merge_requested and captured_batches:
         await _send_autogami_merged_batches(ctx, captured_batches)
-        await ctx.send(
-            f"✅ {ctx.author.mention} he enviado {len(batches)} tanda(s) de `.v` y "
-            f"publicado {len(captured_batches)} merge(s)."
-        )
-        return
-
-    await ctx.send(
-        f"✅ {ctx.author.mention} he enviado {len(batches)} tanda(s) de `.v` correctamente."
-    )
 
 
 def register_autogami_commands(bot: commands.Bot, noah_group: commands.Group) -> None:
