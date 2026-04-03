@@ -18,6 +18,19 @@ CLAIM_REGEX = re.compile(
 )
 
 
+async def _add_reactions_concurrently(
+    message: discord.Message,
+    emojis: list[str],
+) -> None:
+    async def _add_reaction(emoji: str) -> None:
+        try:
+            await message.add_reaction(emoji)
+        except discord.HTTPException:
+            pass
+
+    await asyncio.gather(*(_add_reaction(emoji) for emoji in emojis))
+
+
 def register_core_commands(bot: commands.Bot) -> None:
     @bot.event
     async def on_ready() -> None:
@@ -147,11 +160,10 @@ def register_core_commands(bot: commands.Bot) -> None:
         claim_message = await message.channel.send(embed=embed)
         context.autogami_claim_messages[claim_message.id] = user.id
 
-        for favorite_emoji in context.autogami_tokens.get_favorite_emojis(user.id):
-            try:
-                await claim_message.add_reaction(favorite_emoji)
-            except discord.HTTPException:
-                continue
+        await _add_reactions_concurrently(
+            claim_message,
+            context.autogami_tokens.get_favorite_emojis(user.id),
+        )
 
         try:
             await message.delete()
