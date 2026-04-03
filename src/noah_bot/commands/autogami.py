@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import suppress
 from pathlib import Path
 
 import discord
@@ -302,21 +303,33 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
 
     for index, batch in enumerate(batches, start=1):
         command_text = f".v {' '.join(batch)}"
+        wait_task: asyncio.Task[discord.Message] | None = None
+        if merge_requested:
+            wait_task = asyncio.create_task(_wait_for_waifugami_response(ctx, batch))
+
         try:
             status, body = await _send_autogami_message(ctx, token, command_text)
         except Exception:
+            if wait_task is not None:
+                wait_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await wait_task
             if index < len(batches):
                 await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
             continue
 
         if not 200 <= status < 300:
+            if wait_task is not None:
+                wait_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await wait_task
             if index < len(batches):
                 await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
             continue
 
         if merge_requested:
             try:
-                waifugami_response = await _wait_for_waifugami_response(ctx, batch)
+                waifugami_response = await wait_task
             except asyncio.TimeoutError:
                 if index < len(batches):
                     await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
