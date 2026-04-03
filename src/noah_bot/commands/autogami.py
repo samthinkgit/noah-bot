@@ -304,29 +304,23 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
         command_text = f".v {' '.join(batch)}"
         try:
             status, body = await _send_autogami_message(ctx, token, command_text)
-        except Exception as exc:
-            await ctx.send(
-                f"❌ Falló la tanda {index}/{len(batches)} (`{command_text}`): {exc}"
-            )
-            return
+        except Exception:
+            if index < len(batches):
+                await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
+            continue
 
         if not 200 <= status < 300:
-            error_body = body[:300] if body else "sin respuesta"
-            await ctx.send(
-                f"❌ La tanda {index}/{len(batches)} falló con HTTP {status}: {error_body}"
-            )
-            return
+            if index < len(batches):
+                await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
+            continue
 
         if merge_requested:
             try:
                 waifugami_response = await _wait_for_waifugami_response(ctx, batch)
             except asyncio.TimeoutError:
-                await ctx.send(
-                    f"❌ La tanda {index}/{len(batches)} se envió, pero no detecté la respuesta "
-                    f"de Waifugami en {AUTOGAMI_V_RESPONSE_TIMEOUT_SECONDS}s para `{command_text}`. "
-                    "Paro aquí para no desordenar los merges."
-                )
-                return
+                if index < len(batches):
+                    await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
+                continue
 
             captured_batches.append((batch, waifugami_response))
 
