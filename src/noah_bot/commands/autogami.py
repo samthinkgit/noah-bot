@@ -7,7 +7,11 @@ import discord
 from discord.ext import commands
 
 from noah_bot.modules.bot_context import get_bot_context
-from noah_bot.modules.discord_formatter import _parse_embed_metadata, render_embeds_to_png
+from noah_bot.modules.discord_formatter import (
+    _parse_embed_metadata,
+    build_loading_embed,
+    render_embeds_to_png,
+)
 from noah_bot.modules.send_message import delete_message, send_message
 
 
@@ -301,6 +305,22 @@ async def _delete_autogami_silent_messages(
     _ = results
 
 
+async def _update_autogami_progress_message(
+    progress_message: discord.Message | None,
+    completed_batches: int,
+    total_batches: int,
+) -> None:
+    if progress_message is None or total_batches <= 0:
+        return
+
+    percent = int(completed_batches * 100 / total_batches)
+    embed = build_loading_embed(
+        title=f"Autogami {completed_batches}/{total_batches}",
+        percent=percent,
+    )
+    await progress_message.edit(embed=embed)
+
+
 async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> None:
     if ctx.guild is None:
         await ctx.send("❌ Este comando solo funciona dentro de un servidor.")
@@ -344,6 +364,13 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
         for index in range(0, len(sanitized_numbers), AUTOGAMI_V_BATCH_SIZE)
     ]
     captured_batches: list[tuple[list[str], list[discord.Embed]]] = []
+    show_progress = merge_requested and silent_requested
+    progress_message: discord.Message | None = None
+
+    if show_progress:
+        progress_message = await ctx.send(
+            embed=build_loading_embed(title=f"Autogami 0/{len(batches)}", percent=0)
+        )
 
     for index, batch in enumerate(batches, start=1):
         command_text = f".v {' '.join(batch)}"
@@ -358,6 +385,9 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
                 wait_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await wait_task
+            if show_progress:
+                with suppress(discord.HTTPException, discord.NotFound):
+                    await _update_autogami_progress_message(progress_message, index, len(batches))
             if index < len(batches):
                 await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
             continue
@@ -367,6 +397,9 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
                 wait_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await wait_task
+            if show_progress:
+                with suppress(discord.HTTPException, discord.NotFound):
+                    await _update_autogami_progress_message(progress_message, index, len(batches))
             if index < len(batches):
                 await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
             continue
@@ -375,6 +408,9 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
             try:
                 waifugami_response = await wait_task
             except asyncio.TimeoutError:
+                if show_progress:
+                    with suppress(discord.HTTPException, discord.NotFound):
+                        await _update_autogami_progress_message(progress_message, index, len(batches))
                 if index < len(batches):
                     await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
                 continue
@@ -392,8 +428,16 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
 
             captured_batches.append((batch, response_embeds))
 
+        if show_progress:
+            with suppress(discord.HTTPException, discord.NotFound):
+                await _update_autogami_progress_message(progress_message, index, len(batches))
+
         if index < len(batches):
             await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
+
+    if show_progress and progress_message is not None:
+        with suppress(discord.HTTPException, discord.Forbidden, discord.NotFound):
+            await progress_message.delete()
 
     if merge_requested and captured_batches:
         await _send_autogami_merged_batches(ctx, captured_batches)
