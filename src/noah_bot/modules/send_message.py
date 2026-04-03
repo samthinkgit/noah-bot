@@ -123,3 +123,20 @@ def send_message(
         return edit_status, edit_body
 
     return edit_status, edit_body
+
+
+def delete_message(
+    message_id: str,
+    discord_token: str,
+    discord_user_id: str,
+    server_id: str,
+    channel_id: str,
+) -> tuple[int, str]:
+    headers = _build_headers(
+        discord_token,
+        discord_user_id,
+        server_id,
+        channel_id,
+    )
+    path = f"/api/v6/channels/{channel_id}/messages/{message_id}"
+    return _request_with_redirects("DELETE", "discordapp.com", path, "", headers)

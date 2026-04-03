@@ -1,4 +1,5 @@
 import asyncio
+import json
 from contextlib import suppress
 from pathlib import Path
 
@@ -7,7 +8,7 @@ from discord.ext import commands
 
 from noah_bot.modules.bot_context import get_bot_context
 from noah_bot.modules.discord_formatter import _parse_embed_metadata, render_embeds_to_png
-from noah_bot.modules.send_message import send_message
+from noah_bot.modules.send_message import delete_message, send_message
 
 
 MEDIA_DIR = Path(__file__).resolve().parents[3] / "media"
@@ -52,8 +53,8 @@ def _build_autogami_help_embed() -> discord.Embed:
         inline=False,
     )
     embed.add_field(
-        name=".noah autogami v <num> <num> ... [-merge]",
-        value="Envia `.v` en tandas de 5 con 6s de espera entre cada tanda. Alias: `.nv`.",
+        name=".noah autogami v <num> <num> ... [-merge] [-silent]",
+        value="Envia `.v` en tandas de 5 con 6s de espera entre cada tanda. Alias: `.nv`. `-silent` requiere `-merge`.",
         inline=False,
     )
     return embed
@@ -203,6 +204,18 @@ def _parse_autogami_v_inputs(values: tuple[str, ...]) -> tuple[list[str], set[st
     return numbers, flags
 
 
+def _extract_message_id(response_body: str) -> str | None:
+    try:
+        payload = json.loads(response_body)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+    message_id = payload.get("id")
+    if isinstance(message_id, str) and message_id:
+        return message_id
+    return None
+
+
 def _response_matches_batch(message: discord.Message, batch: list[str]) -> bool:
     if message.author.id != WAIFUGAMI_BOT_USER_ID:
         return False
@@ -246,10 +259,10 @@ async def _wait_for_waifugami_response(
 
 async def _send_autogami_merged_batches(
     ctx: commands.Context,
-    captured_batches: list[tuple[list[str], discord.Message]],
+    captured_batches: list[tuple[list[str], list[discord.Embed]]],
 ) -> None:
-    for index, (batch, response_message) in enumerate(captured_batches, start=1):
-        buffer = await asyncio.to_thread(render_embeds_to_png, response_message.embeds)
+    for index, (batch, embeds) in enumerate(captured_batches, start=1):
+        buffer = await asyncio.to_thread(render_embeds_to_png, embeds)
         if buffer is None:
             await ctx.send(
                 f"⚠️ No pude hacer merge de la respuesta {index}/{len(captured_batches)} "
@@ -262,6 +275,32 @@ async def _send_autogami_merged_batches(
         )
 
 
+async def _delete_autogami_silent_messages(
+    ctx: commands.Context,
+    token: str,
+    sent_message_id: str | None,
+    waifugami_response: discord.Message,
+) -> None:
+    delete_tasks = []
+
+    if sent_message_id and ctx.guild is not None:
+        delete_tasks.append(
+            asyncio.to_thread(
+                delete_message,
+                sent_message_id,
+                token,
+                str(ctx.author.id),
+                str(ctx.guild.id),
+                str(ctx.channel.id),
+            )
+        )
+
+    delete_tasks.append(waifugami_response.delete())
+
+    results = await asyncio.gather(*delete_tasks, return_exceptions=True)
+    _ = results
+
+
 async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> None:
     if ctx.guild is None:
         await ctx.send("❌ Este comando solo funciona dentro de un servidor.")
@@ -269,16 +308,21 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
 
     if not values:
         await ctx.send(
-            "❌ Usa `.noah autogami v <num> <num> <num> ... [-merge]` o `.nv <num> <num> ... [-merge]`."
+            "❌ Usa `.noah autogami v <num> <num> <num> ... [-merge] [-silent]` o `.nv <num> <num> ... [-merge] [-silent]`."
         )
         return
 
     sanitized_numbers, flags = _parse_autogami_v_inputs(values)
     merge_requested = "-merge" in flags
-    unknown_flags = sorted(flag for flag in flags if flag != "-merge")
+    silent_requested = "-silent" in flags
+    unknown_flags = sorted(flag for flag in flags if flag not in {"-merge", "-silent"})
 
     if unknown_flags:
         await ctx.send(f"❌ Flag(s) no reconocidos: {' '.join(unknown_flags)}")
+        return
+
+    if silent_requested and not merge_requested:
+        await ctx.send("❌ `-silent` solo funciona si también usas `-merge`.")
         return
 
     if not sanitized_numbers:
@@ -299,7 +343,7 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
         sanitized_numbers[index : index + AUTOGAMI_V_BATCH_SIZE]
         for index in range(0, len(sanitized_numbers), AUTOGAMI_V_BATCH_SIZE)
     ]
-    captured_batches: list[tuple[list[str], discord.Message]] = []
+    captured_batches: list[tuple[list[str], list[discord.Embed]]] = []
 
     for index, batch in enumerate(batches, start=1):
         command_text = f".v {' '.join(batch)}"
@@ -335,7 +379,18 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
                     await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
                 continue
 
-            captured_batches.append((batch, waifugami_response))
+            response_embeds = list(waifugami_response.embeds)
+            if silent_requested:
+                sent_message_id = _extract_message_id(body)
+                with suppress(discord.HTTPException, discord.Forbidden, discord.NotFound):
+                    await _delete_autogami_silent_messages(
+                        ctx,
+                        token,
+                        sent_message_id,
+                        waifugami_response,
+                    )
+
+            captured_batches.append((batch, response_embeds))
 
         if index < len(batches):
             await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
