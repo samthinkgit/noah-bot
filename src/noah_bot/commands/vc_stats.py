@@ -4,6 +4,7 @@ import discord
 from discord.ext import commands
 
 from noah_bot.modules.bot_context import get_bot_context
+from noah_bot.modules.daily_stats import overlap_seconds_for_current_day
 from noah_bot.modules.discord_formatter import EmbedTable
 
 
@@ -152,6 +153,20 @@ def register_vc_stats_commands(bot: commands.Bot, noah_group: commands.Group) ->
             guild_id=member.guild.id,
             guild_name=member.guild.name,
         )
+
+        if result and result.get("event") == "leave":
+            tracked_seconds = overlap_seconds_for_current_day(
+                result.get("started_at"),
+                result.get("ended_at"),
+            )
+            if tracked_seconds > 0:
+                context.daily_stats.add_vc_seconds(
+                    member.guild.id,
+                    member.guild.name,
+                    member.id,
+                    member.display_name,
+                    tracked_seconds,
+                )
 
         if result and result.get("leveled_up") and result.get("new_level") is not None:
             await _send_level_alert(

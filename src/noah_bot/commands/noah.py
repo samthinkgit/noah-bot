@@ -12,6 +12,7 @@ from noah_bot.commands.tts import register_tts_commands
 from noah_bot.commands.vc_stats import register_vc_stats_commands
 from noah_bot.commands.waifu import register_waifu_commands
 from noah_bot.modules.bot_context import get_bot_context
+from noah_bot.modules.daily_stats import overlap_seconds_for_current_day
 from noah_bot.modules.discord_formatter import (
     EmbedTable,
     RARITY_COLORS,
@@ -33,6 +34,7 @@ HUSBANDO_TRIGGER_PATTERN = re.compile(
     r"husbando appeared",
     re.IGNORECASE,
 )
+USER_FLAG_PATTERN = re.compile(r"(?<!\S)-user(?!\S)")
 
 
 def _is_husbando_spawn_message(message: discord.Message) -> bool:
@@ -42,6 +44,117 @@ def _is_husbando_spawn_message(message: discord.Message) -> bool:
     first_embed = message.embeds[0]
     description = (first_embed.description or "").strip()
     return bool(HUSBANDO_TRIGGER_PATTERN.search(description))
+
+
+def _resolve_daily_target(
+    ctx: commands.Context,
+    args: str,
+) -> discord.Member:
+    sanitized_args = args.strip()
+    if not sanitized_args:
+        return ctx.author
+
+    if not USER_FLAG_PATTERN.search(sanitized_args):
+        raise ValueError("❌ Usa `.noah daily` o `.noah daily -user @user`.")
+
+    if not ctx.message.mentions:
+        raise ValueError("❌ Debes mencionar un usuario válido después de `-user`.")
+
+    target = ctx.message.mentions[0]
+    if not isinstance(target, discord.Member):
+        raise ValueError("❌ El usuario indicado debe pertenecer a este servidor.")
+
+    return target
+
+
+def _format_daily_vc(seconds: int) -> str:
+    sanitized_seconds = max(0, int(seconds))
+    hours, remainder = divmod(sanitized_seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+    if minutes > 0:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
+
+
+def _build_metric_lines(
+    guild: discord.Guild,
+    user_stats: dict[int, dict],
+    metric: str,
+    limit: int,
+    formatter,
+) -> str:
+    ranked = [
+        payload
+        for payload in user_stats.values()
+        if int(payload.get(metric, 0)) > 0
+    ]
+    ranked.sort(
+        key=lambda payload: (
+            int(payload.get(metric, 0)),
+            int(payload.get("user_id", 0)),
+        ),
+        reverse=True,
+    )
+
+    if not ranked:
+        return "Sin datos todavía."
+
+    lines: list[str] = []
+    for position, payload in enumerate(ranked[:limit], start=1):
+        user_id = int(payload.get("user_id", 0))
+        member = guild.get_member(user_id)
+        username = (
+            member.mention
+            if member
+            else payload.get("display_name", f"<@{user_id}>")
+        )
+        value = formatter(int(payload.get(metric, 0)))
+        lines.append(f"`#{position}` {username} • `{value}`")
+
+    return "\n".join(lines)
+
+
+def _collect_daily_user_stats(
+    ctx: commands.Context,
+) -> dict[int, dict]:
+    context = get_bot_context(ctx.bot)
+    merged_stats = context.daily_stats.get_guild_user_stats(ctx.guild.id)
+
+    active_sessions = context.voice_manager.get_active_sessions(guild_id=ctx.guild.id)
+    for session in active_sessions:
+        try:
+            user_id = int(session["user_id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+
+        active_seconds = overlap_seconds_for_current_day(session.get("started_at"))
+        if active_seconds <= 0:
+            continue
+
+        member = ctx.guild.get_member(user_id)
+        display_name = (
+            member.display_name
+            if member is not None
+            else str(session.get("display_name") or f"<@{user_id}>")
+        )
+        payload = merged_stats.setdefault(
+            user_id,
+            {
+                "user_id": user_id,
+                "display_name": display_name,
+                "messages": 0,
+                "vc_seconds": 0,
+                "waifu_claims": 0,
+                "autogami_uses": 0,
+            },
+        )
+        payload["display_name"] = display_name
+        payload["vc_seconds"] = int(payload.get("vc_seconds", 0)) + active_seconds
+
+    return merged_stats
 
 
 def register_noah_commands(bot: commands.Bot) -> None:
@@ -74,6 +187,8 @@ def register_noah_commands(bot: commands.Bot) -> None:
         chart.add_row([".noah ping", "Check if Noah is responsive."])
         chart.add_row([".noah kill", "Stop the bot process immediately."])
         chart.add_row([".noah help", "Show Noah AI commands."])
+        chart.add_row([".noah daily", "Resumen diario del servidor."])
+        chart.add_row([".noah daily -user @user", "Resumen diario de un usuario."])
         chart.add_row([".noah autogami help", "Show Autogami sync commands."])
         chart.add_row([".noah vc help", "Show voice stats commands."])
         chart.add_row(
@@ -85,6 +200,112 @@ def register_noah_commands(bot: commands.Bot) -> None:
         chart.add_row([".steallist help", "Show steallist commands."])
 
         await ctx.send(embed=chart.render())
+
+    @noah.command()
+    async def daily(ctx: commands.Context, *, args: str = "") -> None:
+        if ctx.guild is None:
+            await ctx.send("❌ Este comando solo funciona dentro de un servidor.")
+            return
+
+        try:
+            target_user = _resolve_daily_target(ctx, args)
+        except ValueError as exc:
+            await ctx.send(str(exc))
+            return
+
+        context = get_bot_context(ctx.bot)
+        current_date = context.daily_stats.get_current_date()
+        user_stats = _collect_daily_user_stats(ctx)
+
+        if args.strip():
+            payload = user_stats.get(
+                target_user.id,
+                {
+                    "messages": 0,
+                    "vc_seconds": 0,
+                    "waifu_claims": 0,
+                    "autogami_uses": 0,
+                },
+            )
+            embed = discord.Embed(
+                title=f"Daily Stats · {target_user.display_name}",
+                description=f"Fecha: `{current_date}`",
+                color=discord.Color.blurple(),
+            )
+            embed.set_thumbnail(url=target_user.display_avatar.url)
+            embed.add_field(
+                name="Mensajes",
+                value=f"`{int(payload.get('messages', 0))}`",
+                inline=True,
+            )
+            embed.add_field(
+                name="VC hoy",
+                value=f"`{_format_daily_vc(int(payload.get('vc_seconds', 0)))}`",
+                inline=True,
+            )
+            embed.add_field(
+                name="Waifus claimeadas",
+                value=f"`{int(payload.get('waifu_claims', 0))}`",
+                inline=True,
+            )
+            embed.add_field(
+                name="Autogami",
+                value=f"`{int(payload.get('autogami_uses', 0))}`",
+                inline=True,
+            )
+            await ctx.send(embed=embed)
+            return
+
+        embed = discord.Embed(
+            title="Daily Stats",
+            description=f"Fecha: `{current_date}`",
+            color=discord.Color.blurple(),
+        )
+        embed.add_field(
+            name="Top mensajes",
+            value=_build_metric_lines(
+                ctx.guild,
+                user_stats,
+                "messages",
+                5,
+                lambda value: str(value),
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Top VC hoy",
+            value=_build_metric_lines(
+                ctx.guild,
+                user_stats,
+                "vc_seconds",
+                5,
+                _format_daily_vc,
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Top waifu claims",
+            value=_build_metric_lines(
+                ctx.guild,
+                user_stats,
+                "waifu_claims",
+                5,
+                lambda value: str(value),
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Top autogami",
+            value=_build_metric_lines(
+                ctx.guild,
+                user_stats,
+                "autogami_uses",
+                5,
+                lambda value: str(value),
+            ),
+            inline=False,
+        )
+        await ctx.send(embed=embed)
 
     @noah.command()
     async def ask(ctx: commands.Context, *, question: str) -> None:
@@ -337,6 +558,22 @@ def register_noah_commands(bot: commands.Bot) -> None:
 
         context = get_bot_context(bot)
         context.latest_time_it = time.time()
+
+    @bot.listen("on_message")
+    async def _track_daily_messages(message: discord.Message) -> None:
+        if message.author.bot or message.guild is None:
+            return
+
+        if not isinstance(message.author, discord.Member):
+            return
+
+        context = get_bot_context(bot)
+        context.daily_stats.increment_messages(
+            message.guild.id,
+            message.guild.name,
+            message.author.id,
+            message.author.display_name,
+        )
 
     register_waifu_commands(noah)
     register_autogami_commands(bot, noah)

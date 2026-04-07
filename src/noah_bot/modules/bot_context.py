@@ -4,6 +4,7 @@ from discord.ext import commands
 
 from noah_bot.modules.ai import AiResponder
 from noah_bot.modules.autogami import AutogamiTokenStore
+from noah_bot.modules.daily_stats import DailyStatsManager
 from noah_bot.modules.discord_formatter import UserEmojiManager
 from noah_bot.modules.leaderboard import Leaderboard
 from noah_bot.modules.relics_game import RelicsGameManager
@@ -26,6 +27,7 @@ class BotContext:
     relics_manager: RelicsGameManager = field(
         default_factory=lambda: RelicsGameManager(json_path="noah_relics.json")
     )
+    daily_stats: DailyStatsManager = field(default_factory=DailyStatsManager)
     autogami_claim_messages: dict[int, int] = field(default_factory=dict)
     autogami_chest_messages: dict[int, str] = field(default_factory=dict)
     tts_greet_sessions: dict[int, int] = field(default_factory=dict)

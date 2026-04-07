@@ -213,6 +213,10 @@ def _normalize_waifu_identifier(value: str) -> str:
     return sanitized.casefold()
 
 
+def _display_name_for_user(user: discord.abc.User) -> str:
+    return getattr(user, "display_name", getattr(user, "name", str(user.id)))
+
+
 def _can_manage_autogami_chests(member: discord.Member) -> bool:
     if member.guild_permissions.administrator:
         return True
@@ -582,6 +586,13 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
                 await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
             continue
 
+        context.daily_stats.increment_autogami_uses(
+            ctx.guild.id,
+            ctx.guild.name,
+            target_user.id,
+            _display_name_for_user(target_user),
+        )
+
         if merge_requested:
             try:
                 waifugami_response = await wait_task
@@ -679,6 +690,12 @@ def register_autogami_commands(bot: commands.Bot, noah_group: commands.Group) ->
                 str(user.id),
                 str(reaction.message.guild.id),
                 str(reaction.message.channel.id),
+            )
+            context.daily_stats.increment_autogami_uses(
+                reaction.message.guild.id,
+                reaction.message.guild.name,
+                user.id,
+                _display_name_for_user(user),
             )
         except Exception:
             return

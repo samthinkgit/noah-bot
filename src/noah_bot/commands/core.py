@@ -150,6 +150,14 @@ def register_core_commands(bot: commands.Bot) -> None:
         if context.latest_time_it is not None:
             claim_time_seconds = time.time() - context.latest_time_it
 
+        if message.guild is not None:
+            context.daily_stats.increment_waifu_claims(
+                message.guild.id,
+                message.guild.name,
+                user.id,
+                user.display_name,
+            )
+
         embed = WaifuClaimFormatter.build_embed(
             user=user,
             waifu_name=waifu_name,
@@ -205,6 +213,12 @@ def register_core_commands(bot: commands.Bot) -> None:
                 str(user.id),
                 str(message.guild.id),
                 str(message.channel.id),
+            )
+            context.daily_stats.increment_autogami_uses(
+                message.guild.id,
+                message.guild.name,
+                user.id,
+                user.display_name,
             )
         except Exception:
             return
