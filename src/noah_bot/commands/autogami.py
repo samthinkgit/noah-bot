@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from contextlib import suppress
 from pathlib import Path
 
@@ -23,6 +24,16 @@ AUTOGAMI_V_BATCH_SIZE = 5
 AUTOGAMI_V_DELAY_SECONDS = 6
 AUTOGAMI_V_RESPONSE_TIMEOUT_SECONDS = 3
 WAIFUGAMI_BOT_USER_ID = 722418701852344391
+CHEST_TRIGGER_PATTERN = re.compile(r"\.open\s+<treasure\s+type>", re.IGNORECASE)
+CHEST_TYPE_COLORS = {
+    "platinum": 0x424860,
+    "bronze": 0xCD8032,
+    "silver": 0xAAA9AD,
+    "gold": 0xFFD900,
+    "diamond": 0xB9F2FF,
+    "zeta": 0xFFC0CA,
+    "event": 0xFFC0CA,
+}
 
 
 def _build_autogami_help_embed() -> discord.Embed:
@@ -52,8 +63,18 @@ def _build_autogami_help_embed() -> discord.Embed:
         inline=False,
     )
     embed.add_field(
+        name=".noah autogami delfav <emoji>",
+        value="Borra un emoji de tus favs de Autogami.",
+        inline=False,
+    )
+    embed.add_field(
         name=".noah autogami showfavs",
         value="Muestra todos tus emojis favoritos guardados.",
+        inline=False,
+    )
+    embed.add_field(
+        name=".noah autogami chestconfig <emoji>",
+        value="Configura el emoji para abrir chest automáticamente. Solo admins/Funcionarios.",
         inline=False,
     )
     embed.add_field(
@@ -188,6 +209,89 @@ def _normalize_waifu_identifier(value: str) -> str:
     if sanitized.isdigit():
         return str(int(sanitized))
     return sanitized.casefold()
+
+
+def _can_manage_autogami_chests(member: discord.Member) -> bool:
+    if member.guild_permissions.administrator:
+        return True
+
+    return any(role.name == "Funcionarios" for role in member.roles)
+
+
+def _iter_embed_text_parts(embed: discord.Embed) -> list[str]:
+    parts = [
+        embed.title or "",
+        embed.description or "",
+    ]
+
+    if embed.author and embed.author.name:
+        parts.append(embed.author.name)
+
+    if embed.footer and embed.footer.text:
+        parts.append(embed.footer.text)
+
+    for field in embed.fields:
+        parts.append(field.name or "")
+        parts.append(field.value or "")
+
+    return parts
+
+
+def _find_chest_embed(message: discord.Message) -> discord.Embed | None:
+    if message.author.id != WAIFUGAMI_BOT_USER_ID:
+        return None
+
+    for embed in message.embeds:
+        if any(
+            CHEST_TRIGGER_PATTERN.search(text)
+            for text in _iter_embed_text_parts(embed)
+        ):
+            return embed
+
+    return None
+
+
+def _split_rgb(color_value: int) -> tuple[int, int, int]:
+    return (
+        (color_value >> 16) & 0xFF,
+        (color_value >> 8) & 0xFF,
+        color_value & 0xFF,
+    )
+
+
+def _color_distance(left: int, right: int) -> int:
+    left_red, left_green, left_blue = _split_rgb(left)
+    right_red, right_green, right_blue = _split_rgb(right)
+    return (
+        (left_red - right_red) ** 2
+        + (left_green - right_green) ** 2
+        + (left_blue - right_blue) ** 2
+    )
+
+
+def _resolve_chest_type(embed: discord.Embed) -> str | None:
+    if embed.color is None:
+        return None
+
+    color_value = embed.color.value
+    nearest_type = min(
+        ("platinum", "bronze", "silver", "gold", "diamond", "zeta"),
+        key=lambda chest_type: _color_distance(
+            color_value,
+            CHEST_TYPE_COLORS[chest_type],
+        ),
+    )
+
+    if nearest_type != "zeta":
+        return nearest_type
+
+    image_url = ""
+    if embed.image and embed.image.url:
+        image_url = embed.image.url
+
+    if "zetachest" in image_url.casefold():
+        return "zeta"
+    return "event"
 
 
 def _parse_autogami_v_inputs(values: tuple[str, ...]) -> tuple[list[str], set[str]]:
@@ -444,6 +548,66 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
 
 
 def register_autogami_commands(bot: commands.Bot, noah_group: commands.Group) -> None:
+    @bot.listen("on_message")
+    async def _handle_autogami_chest_spawn(message: discord.Message) -> None:
+        if message.guild is None:
+            return
+
+        chest_embed = _find_chest_embed(message)
+        if chest_embed is None:
+            return
+
+        chest_type = _resolve_chest_type(chest_embed)
+        if chest_type is None:
+            return
+
+        context = get_bot_context(bot)
+        chest_emoji = context.autogami_tokens.get_chest_emoji(message.guild.id)
+        if not chest_emoji:
+            return
+
+        context.autogami_chest_messages[message.id] = chest_type
+
+        try:
+            await message.add_reaction(chest_emoji)
+        except discord.HTTPException:
+            pass
+
+    @bot.listen("on_reaction_add")
+    async def _handle_autogami_chest_reaction(
+        reaction: discord.Reaction,
+        user: discord.User | discord.Member,
+    ) -> None:
+        if user.bot or reaction.message.guild is None:
+            return
+
+        context = get_bot_context(bot)
+        chest_type = context.autogami_chest_messages.get(reaction.message.id)
+        if chest_type is None:
+            return
+
+        configured_emoji = context.autogami_tokens.get_chest_emoji(
+            reaction.message.guild.id
+        )
+        if configured_emoji is None or str(reaction.emoji) != configured_emoji:
+            return
+
+        token = context.autogami_tokens.get_token(user.id)
+        if token is None:
+            return
+
+        try:
+            await asyncio.to_thread(
+                send_message,
+                f".open {chest_type}",
+                token,
+                str(user.id),
+                str(reaction.message.guild.id),
+                str(reaction.message.channel.id),
+            )
+        except Exception:
+            return
+
     @noah_group.group()
     async def autogami(ctx: commands.Context) -> None:
         if ctx.invoked_subcommand is None:
@@ -514,10 +678,24 @@ def register_autogami_commands(bot: commands.Bot, noah_group: commands.Group) ->
         context = get_bot_context(ctx.bot)
         added = context.autogami_tokens.add_favorite_emoji(ctx.author.id, emoji)
         if added:
-            await ctx.send(f"{ctx.author.mention} he guardado `{emoji}` en tus favs de Autogami.")
+            await ctx.send(
+                f"{ctx.author.mention} he guardado `{emoji}` en tus favs de Autogami."
+            )
             return
 
         await ctx.send(f"{ctx.author.mention} `{emoji}` ya estaba en tus favs de Autogami.")
+
+    @autogami.command()
+    async def delfav(ctx: commands.Context, emoji: str) -> None:
+        context = get_bot_context(ctx.bot)
+        removed = context.autogami_tokens.remove_favorite_emoji(ctx.author.id, emoji)
+        if removed:
+            await ctx.send(
+                f"{ctx.author.mention} he borrado `{emoji}` de tus favs de Autogami."
+            )
+            return
+
+        await ctx.send(f"{ctx.author.mention} `{emoji}` no estaba en tus favs de Autogami.")
 
     @autogami.command()
     async def showfavs(ctx: commands.Context) -> None:
@@ -532,6 +710,31 @@ def register_autogami_commands(bot: commands.Bot, noah_group: commands.Group) ->
         favorites_text = " ".join(favorites)
         await ctx.send(
             f"{ctx.author.mention} tus favs de Autogami son: {favorites_text}"
+        )
+
+    @autogami.command()
+    async def chestconfig(ctx: commands.Context, emoji: str) -> None:
+        if ctx.guild is None:
+            await ctx.send("❌ Este comando solo funciona dentro de un servidor.")
+            return
+
+        if (
+            not isinstance(ctx.author, discord.Member)
+            or not _can_manage_autogami_chests(ctx.author)
+        ):
+            await ctx.send(
+                "❌ Solo administradores o el rol `Funcionarios` pueden usar este comando."
+            )
+            return
+
+        context = get_bot_context(ctx.bot)
+        configured = context.autogami_tokens.set_chest_emoji(ctx.guild.id, emoji)
+        if not configured:
+            await ctx.send("❌ Debes indicar un emoji válido.")
+            return
+
+        await ctx.send(
+            f"✅ El emoji automático de chest ha quedado configurado en `{emoji}`."
         )
 
     @autogami.command(name="v")

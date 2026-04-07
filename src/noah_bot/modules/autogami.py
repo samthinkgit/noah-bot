@@ -94,9 +94,10 @@ class AutogamiTokenStore:
         self.password = password
         self._state = self._load()
         self._users: dict[str, dict[str, Any]] = self._state["users"]
+        self._guilds: dict[str, dict[str, Any]] = self._state["guilds"]
 
     def _default_state(self) -> dict[str, dict[str, Any]]:
-        return {"users": {}}
+        return {"users": {}, "guilds": {}}
 
     def _load(self) -> dict[str, dict[str, Any]]:
         if not self.json_path.exists():
@@ -114,7 +115,11 @@ class AutogamiTokenStore:
             return self._default_state()
 
         users = state.get("users")
-        return {"users": users if isinstance(users, dict) else {}}
+        guilds = state.get("guilds")
+        return {
+            "users": users if isinstance(users, dict) else {},
+            "guilds": guilds if isinstance(guilds, dict) else {},
+        }
 
     def _save(self) -> None:
         payload = _encrypt_payload(self._state, self.password)
@@ -123,6 +128,9 @@ class AutogamiTokenStore:
 
     def _user_key(self, user_id: int) -> str:
         return str(user_id)
+
+    def _guild_key(self, guild_id: int) -> str:
+        return str(guild_id)
 
     def set_token(self, user_id: int, token: str, username: str | None = None) -> None:
         user_data = self._users.get(self._user_key(user_id), {})
@@ -173,3 +181,52 @@ class AutogamiTokenStore:
             return []
 
         return [emoji for emoji in favorites if isinstance(emoji, str) and emoji.strip()]
+
+    def remove_favorite_emoji(self, user_id: int, emoji: str) -> bool:
+        sanitized_emoji = emoji.strip()
+        if not sanitized_emoji:
+            return False
+
+        user_data = self._users.get(self._user_key(user_id))
+        if not isinstance(user_data, dict):
+            return False
+
+        favorites = user_data.get("favorite_emojis")
+        if not isinstance(favorites, list):
+            return False
+
+        filtered_favorites = [
+            favorite
+            for favorite in favorites
+            if isinstance(favorite, str) and favorite.strip() != sanitized_emoji
+        ]
+        if len(filtered_favorites) == len(favorites):
+            return False
+
+        user_data["favorite_emojis"] = filtered_favorites
+        user_data["updated_at"] = _utc_now_iso()
+        self._users[self._user_key(user_id)] = user_data
+        self._save()
+        return True
+
+    def set_chest_emoji(self, guild_id: int, emoji: str) -> bool:
+        sanitized_emoji = emoji.strip()
+        if not sanitized_emoji:
+            return False
+
+        guild_data = self._guilds.get(self._guild_key(guild_id), {})
+        guild_data["chest_emoji"] = sanitized_emoji
+        guild_data["updated_at"] = _utc_now_iso()
+        self._guilds[self._guild_key(guild_id)] = guild_data
+        self._save()
+        return True
+
+    def get_chest_emoji(self, guild_id: int) -> str | None:
+        guild_data = self._guilds.get(self._guild_key(guild_id))
+        if not isinstance(guild_data, dict):
+            return None
+
+        emoji = guild_data.get("chest_emoji")
+        if not isinstance(emoji, str) or not emoji.strip():
+            return None
+        return emoji.strip()
