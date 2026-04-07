@@ -25,6 +25,7 @@ AUTOGAMI_V_DELAY_SECONDS = 6
 AUTOGAMI_V_RESPONSE_TIMEOUT_SECONDS = 3
 WAIFUGAMI_BOT_USER_ID = 722418701852344391
 CHEST_TRIGGER_PATTERN = re.compile(r"\.open\s+<treasure\s+type>", re.IGNORECASE)
+USER_MENTION_PATTERN = re.compile(r"^<@!?(\d+)>$")
 CHEST_TYPE_COLORS = {
     "platinum": 0x424860,
     "bronze": 0xCD8032,
@@ -79,7 +80,7 @@ def _build_autogami_help_embed() -> discord.Embed:
     )
     embed.add_field(
         name=".noah autogami v <num> <num> ... [-merge] [-silent]",
-        value="Envia `.v` en tandas de 5 con 6s de espera entre cada tanda. Alias: `.nv`, `.nvms`. `-silent` requiere `-merge`.",
+        value="Envia `.v` en tandas de 5 con 6s de espera entre cada tanda. Acepta `-user @user`. Alias: `.nv`, `.nvms`. `-silent` requiere `-merge`.",
         inline=False,
     )
     return embed
@@ -190,6 +191,7 @@ async def _send_autogami_message(
     ctx: commands.Context,
     token: str,
     message: str,
+    acting_user_id: int | None = None,
 ) -> tuple[int, str]:
     if ctx.guild is None:
         raise RuntimeError("Autogami requires a guild channel.")
@@ -198,7 +200,7 @@ async def _send_autogami_message(
         send_message,
         message,
         token,
-        str(ctx.author.id),
+        str(acting_user_id if acting_user_id is not None else ctx.author.id),
         str(ctx.guild.id),
         str(ctx.channel.id),
     )
@@ -294,22 +296,70 @@ def _resolve_chest_type(embed: discord.Embed) -> str | None:
     return "event"
 
 
-def _parse_autogami_v_inputs(values: tuple[str, ...]) -> tuple[list[str], set[str]]:
+def _parse_autogami_v_inputs(
+    values: tuple[str, ...],
+) -> tuple[list[str], set[str], str | None, list[str]]:
     numbers: list[str] = []
     flags: set[str] = set()
+    target_user_raw: str | None = None
+    errors: list[str] = []
 
-    for raw_value in values:
+    index = 0
+    while index < len(values):
+        raw_value = values[index]
+        index += 1
+
         value = raw_value.strip()
         if not value:
             continue
 
         if value.startswith("-"):
-            flags.add(value.lower())
+            normalized_flag = value.lower()
+            if normalized_flag == "-user":
+                while index < len(values) and not values[index].strip():
+                    index += 1
+
+                if index >= len(values):
+                    errors.append("❌ `-user` requiere una mención o ID de usuario.")
+                    break
+
+                target_user_raw = values[index].strip()
+                index += 1
+                continue
+
+            flags.add(normalized_flag)
             continue
 
         numbers.append(value)
 
-    return numbers, flags
+    return numbers, flags, target_user_raw, errors
+
+
+def _resolve_autogami_v_target_user(
+    ctx: commands.Context,
+    raw_target: str | None,
+) -> discord.abc.User:
+    if raw_target is None:
+        return ctx.author
+
+    match = USER_MENTION_PATTERN.fullmatch(raw_target)
+    user_id: int | None = None
+    if match is not None:
+        user_id = int(match.group(1))
+    elif raw_target.isdigit():
+        user_id = int(raw_target)
+
+    if user_id is not None:
+        for mentioned_user in ctx.message.mentions:
+            if mentioned_user.id == user_id:
+                return mentioned_user
+
+        if ctx.guild is not None:
+            member = ctx.guild.get_member(user_id)
+            if member is not None:
+                return member
+
+    raise ValueError("❌ No he podido resolver el usuario indicado en `-user`.")
 
 
 def _extract_message_id(response_body: str) -> str | None:
@@ -386,6 +436,7 @@ async def _send_autogami_merged_batches(
 async def _delete_autogami_silent_messages(
     ctx: commands.Context,
     token: str,
+    acting_user_id: int,
     sent_message_id: str | None,
     waifugami_response: discord.Message,
 ) -> None:
@@ -397,7 +448,7 @@ async def _delete_autogami_silent_messages(
                 delete_message,
                 sent_message_id,
                 token,
-                str(ctx.author.id),
+                str(acting_user_id),
                 str(ctx.guild.id),
                 str(ctx.channel.id),
             )
@@ -436,7 +487,13 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
         )
         return
 
-    sanitized_numbers, flags = _parse_autogami_v_inputs(values)
+    sanitized_numbers, flags, target_user_raw, parse_errors = _parse_autogami_v_inputs(
+        values
+    )
+    if parse_errors:
+        await ctx.send(parse_errors[0])
+        return
+
     merge_requested = "-merge" in flags
     silent_requested = "-silent" in flags
     unknown_flags = sorted(flag for flag in flags if flag not in {"-merge", "-silent"})
@@ -455,11 +512,23 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
         )
         return
 
+    try:
+        target_user = _resolve_autogami_v_target_user(ctx, target_user_raw)
+    except ValueError as exc:
+        await ctx.send(str(exc))
+        return
+
     context = get_bot_context(ctx.bot)
-    token = context.autogami_tokens.get_token(ctx.author.id)
+    token = context.autogami_tokens.get_token(target_user.id)
     if token is None:
+        if target_user.id == ctx.author.id:
+            await ctx.send(
+                "❌ No tienes un token sincronizado. Usa `.noah autogami sync` primero."
+            )
+            return
+
         await ctx.send(
-            "❌ No tienes un token sincronizado. Usa `.noah autogami sync` primero."
+            f"❌ {target_user.mention} no tiene un token sincronizado en Autogami."
         )
         return
 
@@ -483,7 +552,12 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
             wait_task = asyncio.create_task(_wait_for_waifugami_response(ctx, batch))
 
         try:
-            status, body = await _send_autogami_message(ctx, token, command_text)
+            status, body = await _send_autogami_message(
+                ctx,
+                token,
+                command_text,
+                acting_user_id=target_user.id,
+            )
         except Exception:
             if wait_task is not None:
                 wait_task.cancel()
@@ -526,6 +600,7 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
                     await _delete_autogami_silent_messages(
                         ctx,
                         token,
+                        target_user.id,
                         sent_message_id,
                         waifugami_response,
                     )
