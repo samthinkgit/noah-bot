@@ -13,6 +13,12 @@ def current_day_key(now: datetime | None = None) -> str:
     return current.date().isoformat()
 
 
+def _seconds_since_local_midnight(moment: datetime) -> int:
+    local_moment = moment.astimezone()
+    start_of_day = local_moment.replace(hour=0, minute=0, second=0, microsecond=0)
+    return max(0, int((local_moment - start_of_day).total_seconds()))
+
+
 def overlap_seconds_for_current_day(
     started_at_iso: str | None,
     ended_at_iso: str | None = None,
@@ -48,7 +54,8 @@ def overlap_seconds_for_current_day(
     if overlap_end <= overlap_start:
         return 0
 
-    return int((overlap_end - overlap_start).total_seconds())
+    overlap_seconds = int((overlap_end - overlap_start).total_seconds())
+    return min(overlap_seconds, _seconds_since_local_midnight(ended_local))
 
 
 class DailyStatsManager:
