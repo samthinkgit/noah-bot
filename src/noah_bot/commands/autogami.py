@@ -1350,6 +1350,9 @@ def register_autogami_commands(bot: commands.Bot, noah_group: commands.Group) ->
                 initiator_numbers,
             )
 
+            if initiator_numbers and target_numbers:
+                await asyncio.sleep(AUTOGAMI_TRADE_DELAY_SECONDS)
+
             await _update_trade_loading_message(
                 loading_message,
                 title=f"Recopilando oferta de {_display_name_for_user(target_user)}",
@@ -1369,6 +1372,7 @@ def register_autogami_commands(bot: commands.Bot, noah_group: commands.Group) ->
 
             preview_buffer: discord.File | None = None
             embed_preview_url: str | None = None
+            preview_detail: str | None = None
             try:
                 preview_png = await asyncio.to_thread(
                     render_autogami_trade_preview,
@@ -1385,20 +1389,28 @@ def register_autogami_commands(bot: commands.Bot, noah_group: commands.Group) ->
                 )
                 embed_preview_url = "attachment://autogami_trade_preview.png"
             except Exception:
-                fallback_preview = await asyncio.to_thread(
-                    render_autogami_trade_preview,
-                    _display_name_for_user(ctx.author),
-                    initiator_numbers,
-                    [],
-                    _display_name_for_user(target_user),
-                    target_numbers,
-                    [],
+                preview_detail = (
+                    "No pude generar la preview completa del trade, así que la oferta se envía "
+                    "con visualización reducida."
                 )
-                preview_buffer = discord.File(
-                    fallback_preview,
-                    filename="autogami_trade_preview.png",
-                )
-                embed_preview_url = "attachment://autogami_trade_preview.png"
+                try:
+                    fallback_preview = await asyncio.to_thread(
+                        render_autogami_trade_preview,
+                        _display_name_for_user(ctx.author),
+                        initiator_numbers,
+                        [],
+                        _display_name_for_user(target_user),
+                        target_numbers,
+                        [],
+                    )
+                    preview_buffer = discord.File(
+                        fallback_preview,
+                        filename="autogami_trade_preview.png",
+                    )
+                    embed_preview_url = "attachment://autogami_trade_preview.png"
+                except Exception:
+                    preview_buffer = None
+                    embed_preview_url = None
 
             view = AutogamiTradeView(
                 ctx=ctx,
@@ -1407,26 +1419,54 @@ def register_autogami_commands(bot: commands.Bot, noah_group: commands.Group) ->
                 initiator_numbers=initiator_numbers,
                 target_numbers=target_numbers,
             )
+            trade_embed = _build_autogami_trade_embed(
+                ctx.author,
+                target_user,
+                initiator_numbers,
+                target_numbers,
+                status="pending",
+                detail=preview_detail,
+                preview_url=embed_preview_url,
+            )
             send_kwargs = {
-                "embed": _build_autogami_trade_embed(
-                    ctx.author,
-                    target_user,
-                    initiator_numbers,
-                    target_numbers,
-                    status="pending",
-                    preview_url=embed_preview_url,
-                ),
+                "embed": trade_embed,
                 "view": view,
             }
             if preview_buffer is not None:
                 send_kwargs["file"] = preview_buffer
 
-            sent_message = await ctx.send(
-                **send_kwargs,
-            )
+            try:
+                sent_message = await ctx.send(
+                    **send_kwargs,
+                )
+            except Exception:
+                sent_message = await ctx.send(
+                    embed=_build_autogami_trade_embed(
+                        ctx.author,
+                        target_user,
+                        initiator_numbers,
+                        target_numbers,
+                        status="pending",
+                        detail=(
+                            "No pude adjuntar la preview visual, pero la oferta de trade sí quedó creada."
+                        ),
+                    ),
+                    view=view,
+                )
             view.message = sent_message
             if sent_message.attachments:
                 view.preview_url = sent_message.attachments[0].url
+        except Exception as exc:
+            await ctx.send(
+                embed=_build_autogami_trade_embed(
+                    ctx.author,
+                    target_user,
+                    initiator_numbers,
+                    target_numbers,
+                    status="failed",
+                    detail=f"El trade no pudo prepararse: `{exc}`",
+                )
+            )
         finally:
             with suppress(discord.HTTPException, discord.Forbidden, discord.NotFound):
                 await loading_message.delete()

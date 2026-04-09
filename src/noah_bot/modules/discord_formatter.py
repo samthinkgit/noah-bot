@@ -10,6 +10,13 @@ from typing import Optional
 import discord
 
 
+def _load_font(font_name: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    try:
+        return ImageFont.truetype(font_name, size)
+    except Exception:
+        return ImageFont.load_default()
+
+
 RARITY_COLORS = {
     "alpha": 0x3A423A,
     "beta": 0x357233,
@@ -385,8 +392,8 @@ class DiscordImageRenderer:
         self.title_height = title_height
         self.max_columns = max_columns
 
-        self.font_bold = ImageFont.truetype("DejaVuSans-Bold.ttf", 22)
-        self.font_big = ImageFont.truetype("DejaVuSans-Bold.ttf", 40)
+        self.font_bold = _load_font("DejaVuSans-Bold.ttf", 22)
+        self.font_big = _load_font("DejaVuSans-Bold.ttf", 40)
 
     def _download_image(self, url: str) -> Image.Image:
         response = requests.get(url, timeout=10)
@@ -758,9 +765,9 @@ def _build_trade_section_image(
     color: tuple[int, int, int],
     direction: str,
 ) -> Image.Image:
-    badge_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 22)
-    text_font = ImageFont.truetype("DejaVuSans.ttf", 24)
-    placeholder_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 30)
+    badge_font = _load_font("DejaVuSans-Bold.ttf", 22)
+    text_font = _load_font("DejaVuSans.ttf", 24)
+    placeholder_font = _load_font("DejaVuSans-Bold.ttf", 30)
 
     merged_image = _render_trade_bundle_image(embeds)
     if merged_image is not None:
