@@ -157,6 +157,70 @@ def _collect_daily_user_stats(
     return merged_stats
 
 
+def _count_leaf_commands(group: commands.Group) -> int:
+    return sum(
+        1 for command in group.walk_commands() if not isinstance(command, commands.Group)
+    )
+
+
+def _format_noah_category_name(name: str) -> str:
+    special_names = {
+        "vc": "VC",
+        "tts": "TTS",
+    }
+    return special_names.get(name, name.capitalize())
+
+
+def _build_noah_command_stats_embed(bot: commands.Bot) -> discord.Embed:
+    noah_group = bot.get_command("noah")
+    if not isinstance(noah_group, commands.Group):
+        raise RuntimeError("Noah group is not registered.")
+
+    general_count = 0
+    category_counts: list[tuple[str, int]] = []
+
+    for command in noah_group.commands:
+        if isinstance(command, commands.Group):
+            category_counts.append(
+                (
+                    _format_noah_category_name(command.name),
+                    _count_leaf_commands(command),
+                )
+            )
+            continue
+
+        general_count += 1
+
+    category_counts.sort(key=lambda item: item[0])
+    total_commands = general_count + sum(count for _, count in category_counts)
+
+    embed = discord.Embed(
+        title="Noah status",
+        description="Comandos implementados actualmente en Noah.",
+        color=discord.Color.green(),
+    )
+
+    embed.add_field(name="General", value=f"`{general_count}` comandos", inline=True)
+
+    for category_name, count in category_counts:
+        embed.add_field(
+            name=category_name,
+            value=f"`{count}` comandos",
+            inline=True,
+        )
+
+    embed.add_field(
+        name="Total",
+        value=f"`{total_commands}` comandos",
+        inline=False,
+    )
+    embed.set_footer(
+        text="Conteo generado automaticamente desde los comandos registrados."
+    )
+
+    return embed
+
+
 def register_noah_commands(bot: commands.Bot) -> None:
     @bot.group()
     async def noah(ctx: commands.Context) -> None:
@@ -166,6 +230,10 @@ def register_noah_commands(bot: commands.Bot) -> None:
     @noah.command()
     async def ping(ctx: commands.Context) -> None:
         await ctx.send("Im alive! 🖤")
+
+    @noah.command()
+    async def areyouok(ctx: commands.Context) -> None:
+        await ctx.send(embed=_build_noah_command_stats_embed(ctx.bot))
 
     @noah.command()
     async def kill(ctx: commands.Context) -> None:
@@ -185,6 +253,9 @@ def register_noah_commands(bot: commands.Bot) -> None:
         chart.add_row([".noah merge", "Render all images from a replied message."])
         chart.add_row([".noah if <type>", "Invert embed rarity symbol and color."])
         chart.add_row([".noah ping", "Check if Noah is responsive."])
+        chart.add_row(
+            [".noah areyouok", "Muestra el total de comandos y por categoria."]
+        )
         chart.add_row([".noah kill", "Stop the bot process immediately."])
         chart.add_row([".noah help", "Show Noah AI commands."])
         chart.add_row([".noah daily", "Resumen diario del servidor."])
