@@ -11,6 +11,7 @@ from noah_bot.modules.bot_context import get_bot_context
 from noah_bot.modules.discord_formatter import (
     _parse_embed_metadata,
     build_loading_embed,
+    render_autogami_trade_preview,
     render_embeds_to_png,
 )
 from noah_bot.modules.send_message import delete_message, send_message
@@ -23,6 +24,8 @@ CONSENT_DECLINE_EMOJI = "❌"
 AUTOGAMI_V_BATCH_SIZE = 5
 AUTOGAMI_V_DELAY_SECONDS = 6
 AUTOGAMI_V_RESPONSE_TIMEOUT_SECONDS = 3
+AUTOGAMI_TRADE_DELAY_SECONDS = 5.5
+AUTOGAMI_TRADE_VIEW_TIMEOUT_SECONDS = 300
 WAIFUGAMI_BOT_USER_ID = 722418701852344391
 CHEST_TRIGGER_PATTERN = re.compile(r"\.open\s+<treasure\s+type>", re.IGNORECASE)
 USER_MENTION_PATTERN = re.compile(r"^<@!?(\d+)>$")
@@ -81,6 +84,11 @@ def _build_autogami_help_embed() -> discord.Embed:
     embed.add_field(
         name=".noah autogami v <num> <num> ... [-merge] [-silent]",
         value="Envia `.v` en tandas de 5 con 6s de espera entre cada tanda. Acepta `-user @user`. Alias: `.nv`, `.nvms`. `-silent` requiere `-merge`.",
+        inline=False,
+    )
+    embed.add_field(
+        name=".noah autogami trade <nums...> to @user <nums...>",
+        value="Prepara una oferta de trade, recopila previews silenciosas de ambos lados y permite aceptar o declinar con botones.",
         inline=False,
     )
     return embed
@@ -366,6 +374,171 @@ def _resolve_autogami_v_target_user(
     raise ValueError("❌ No he podido resolver el usuario indicado en `-user`.")
 
 
+def _sanitize_trade_numbers(
+    values: list[str],
+    *,
+    side_label: str,
+) -> tuple[list[str], list[str]]:
+    sanitized: list[str] = []
+    errors: list[str] = []
+
+    for raw_value in values:
+        if raw_value.isdigit():
+            sanitized.append(str(int(raw_value)))
+            continue
+
+        errors.append(
+            f"❌ Los IDs de {side_label} deben ser números. Valor inválido: `{raw_value}`."
+        )
+
+    return sanitized, errors
+
+
+def _parse_autogami_trade_inputs(
+    values: tuple[str, ...],
+) -> tuple[list[str], str | None, list[str], list[str]]:
+    cleaned_values = [value.strip() for value in values if value.strip()]
+    if not cleaned_values:
+        return [], None, [], [
+            "❌ Usa `.noah autogami trade <num> <num> ... to @user <num> <num> ...`."
+        ]
+
+    separator_indexes = [
+        index for index, value in enumerate(cleaned_values) if value.casefold() == "to"
+    ]
+    if not separator_indexes:
+        return [], None, [], [
+            "❌ Falta `to`. Usa `.noah autogami trade <nums...> to @user <nums...>`."
+        ]
+
+    separator_index = separator_indexes[0]
+    if separator_index + 1 >= len(cleaned_values):
+        return [], None, [], [
+            "❌ Después de `to` debes indicar una mención o ID de usuario."
+        ]
+
+    left_raw = cleaned_values[:separator_index]
+    target_user_raw = cleaned_values[separator_index + 1]
+    right_raw = cleaned_values[separator_index + 2 :]
+
+    left_numbers, left_errors = _sanitize_trade_numbers(
+        left_raw,
+        side_label="la oferta del usuario que inicia",
+    )
+    right_numbers, right_errors = _sanitize_trade_numbers(
+        right_raw,
+        side_label="la oferta del usuario objetivo",
+    )
+
+    errors = [*left_errors, *right_errors]
+    if not left_numbers and not right_numbers:
+        errors.append("❌ El trade debe tener al menos una carta en alguno de los lados.")
+
+    return left_numbers, target_user_raw, right_numbers, errors
+
+
+def _format_trade_numbers(numbers: list[str]) -> str:
+    return " ".join(numbers) if numbers else "Sin cartas"
+
+
+def _build_autogami_trade_embed(
+    initiator: discord.abc.User,
+    target_user: discord.abc.User,
+    initiator_numbers: list[str],
+    target_numbers: list[str],
+    *,
+    status: str,
+    detail: str | None = None,
+    preview_url: str | None = None,
+) -> discord.Embed:
+    titles = {
+        "pending": "Autogami Trade",
+        "processing": "Autogami Trade en progreso",
+        "accepted": "Autogami Trade aceptado",
+        "declined": "Autogami Trade declinado",
+        "failed": "Autogami Trade fallido",
+        "expired": "Autogami Trade expirado",
+    }
+    colors = {
+        "pending": discord.Color.orange(),
+        "processing": discord.Color.blurple(),
+        "accepted": discord.Color.green(),
+        "declined": discord.Color.red(),
+        "failed": discord.Color.red(),
+        "expired": discord.Color.dark_grey(),
+    }
+    descriptions = {
+        "pending": (
+            f"{initiator.mention} propone este trade a {target_user.mention}. "
+            f"Solo {target_user.mention} puede aceptarlo o declinarlo."
+        ),
+        "processing": (
+            f"{target_user.mention} ha aceptado. Ejecutando la secuencia automática del trade."
+        ),
+        "accepted": f"Trade completado entre {initiator.mention} y {target_user.mention}.",
+        "declined": f"{target_user.mention} ha declinado la oferta.",
+        "failed": "La secuencia automática del trade no pudo completarse.",
+        "expired": "La oferta expiró antes de recibir respuesta.",
+    }
+
+    embed = discord.Embed(
+        title=titles[status],
+        description=descriptions[status],
+        color=colors[status],
+    )
+    embed.add_field(
+        name=f"Oferta de {_display_name_for_user(initiator)}",
+        value=f"`{_format_trade_numbers(initiator_numbers)}`",
+        inline=False,
+    )
+    embed.add_field(
+        name=f"Oferta de {_display_name_for_user(target_user)}",
+        value=f"`{_format_trade_numbers(target_numbers)}`",
+        inline=False,
+    )
+
+    if detail:
+        embed.add_field(name="Detalle", value=detail, inline=False)
+
+    if preview_url:
+        embed.set_image(url=preview_url)
+
+    return embed
+
+
+def _build_autogami_trade_result_embed(
+    initiator: discord.abc.User,
+    target_user: discord.abc.User,
+    initiator_numbers: list[str],
+    target_numbers: list[str],
+    *,
+    success: bool,
+    detail: str | None = None,
+) -> discord.Embed:
+    embed = discord.Embed(
+        title="Resumen del trade" if success else "Trade interrumpido",
+        description=(
+            f"{initiator.mention} y {target_user.mention} han completado el trade."
+            if success
+            else f"El trade entre {initiator.mention} y {target_user.mention} no terminó correctamente."
+        ),
+        color=discord.Color.green() if success else discord.Color.red(),
+    )
+    embed.add_field(
+        name=f"{_display_name_for_user(initiator)} entregó",
+        value=f"`{_format_trade_numbers(initiator_numbers)}`",
+        inline=False,
+    )
+    embed.add_field(
+        name=f"{_display_name_for_user(target_user)} entregó",
+        value=f"`{_format_trade_numbers(target_numbers)}`",
+        inline=False,
+    )
+    if detail:
+        embed.add_field(name="Detalle", value=detail, inline=False)
+    return embed
+
+
 def _extract_message_id(response_body: str) -> str | None:
     try:
         payload = json.loads(response_body)
@@ -480,6 +653,366 @@ async def _update_autogami_progress_message(
     await progress_message.edit(embed=embed)
 
 
+async def _run_autogami_v_batches(
+    ctx: commands.Context,
+    target_user: discord.abc.User,
+    token: str,
+    batches: list[list[str]],
+    *,
+    capture_embeds: bool,
+    silent: bool,
+    progress_message: discord.Message | None = None,
+) -> list[tuple[list[str], list[discord.Embed]]]:
+    captured_batches: list[tuple[list[str], list[discord.Embed]]] = []
+    context = get_bot_context(ctx.bot)
+    show_progress = progress_message is not None
+
+    for index, batch in enumerate(batches, start=1):
+        command_text = f".v {' '.join(batch)}"
+        wait_task: asyncio.Task[discord.Message] | None = None
+        if capture_embeds:
+            wait_task = asyncio.create_task(_wait_for_waifugami_response(ctx, batch))
+
+        try:
+            status, body = await _send_autogami_message(
+                ctx,
+                token,
+                command_text,
+                acting_user_id=target_user.id,
+            )
+        except Exception:
+            if wait_task is not None:
+                wait_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await wait_task
+            if show_progress:
+                with suppress(discord.HTTPException, discord.NotFound):
+                    await _update_autogami_progress_message(
+                        progress_message, index, len(batches)
+                    )
+            if index < len(batches):
+                await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
+            continue
+
+        if not 200 <= status < 300:
+            if wait_task is not None:
+                wait_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await wait_task
+            if show_progress:
+                with suppress(discord.HTTPException, discord.NotFound):
+                    await _update_autogami_progress_message(
+                        progress_message, index, len(batches)
+                    )
+            if index < len(batches):
+                await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
+            continue
+
+        context.daily_stats.increment_autogami_uses(
+            ctx.guild.id,
+            ctx.guild.name,
+            target_user.id,
+            _display_name_for_user(target_user),
+        )
+
+        if capture_embeds and wait_task is not None:
+            try:
+                waifugami_response = await wait_task
+            except asyncio.TimeoutError:
+                if show_progress:
+                    with suppress(discord.HTTPException, discord.NotFound):
+                        await _update_autogami_progress_message(
+                            progress_message, index, len(batches)
+                        )
+                if index < len(batches):
+                    await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
+                continue
+
+            response_embeds = list(waifugami_response.embeds)
+            if silent:
+                sent_message_id = _extract_message_id(body)
+                with suppress(discord.HTTPException, discord.Forbidden, discord.NotFound):
+                    await _delete_autogami_silent_messages(
+                        ctx,
+                        token,
+                        target_user.id,
+                        sent_message_id,
+                        waifugami_response,
+                    )
+
+            captured_batches.append((batch, response_embeds))
+
+        if show_progress:
+            with suppress(discord.HTTPException, discord.NotFound):
+                await _update_autogami_progress_message(
+                    progress_message, index, len(batches)
+                )
+
+        if index < len(batches):
+            await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
+
+    return captured_batches
+
+
+def _build_autogami_batches(numbers: list[str]) -> list[list[str]]:
+    return [
+        numbers[index : index + AUTOGAMI_V_BATCH_SIZE]
+        for index in range(0, len(numbers), AUTOGAMI_V_BATCH_SIZE)
+    ]
+
+
+async def _collect_autogami_trade_embeds(
+    ctx: commands.Context,
+    target_user: discord.abc.User,
+    numbers: list[str],
+) -> list[discord.Embed]:
+    if not numbers:
+        return []
+
+    context = get_bot_context(ctx.bot)
+    token = context.autogami_tokens.get_token(target_user.id)
+    if token is None:
+        return []
+
+    captured_batches = await _run_autogami_v_batches(
+        ctx,
+        target_user,
+        token,
+        _build_autogami_batches(numbers),
+        capture_embeds=True,
+        silent=True,
+    )
+
+    embeds: list[discord.Embed] = []
+    for _, batch_embeds in captured_batches:
+        embeds.extend(batch_embeds)
+    return embeds
+
+
+async def _update_trade_loading_message(
+    message: discord.Message | None,
+    *,
+    title: str,
+    percent: int,
+) -> None:
+    if message is None:
+        return
+
+    with suppress(discord.HTTPException, discord.NotFound):
+        await message.edit(embed=build_loading_embed(title=title, percent=percent))
+
+
+async def _execute_autogami_trade_sequence(
+    ctx: commands.Context,
+    initiator: discord.abc.User,
+    target_user: discord.abc.User,
+    initiator_numbers: list[str],
+    target_numbers: list[str],
+) -> tuple[bool, str]:
+    if ctx.guild is None:
+        return False, "El trade solo puede ejecutarse dentro de un servidor."
+
+    context = get_bot_context(ctx.bot)
+    initiator_token = context.autogami_tokens.get_token(initiator.id)
+    if initiator_token is None:
+        return False, f"{initiator.mention} ya no tiene token sincronizado."
+
+    target_token = context.autogami_tokens.get_token(target_user.id)
+    if target_token is None:
+        return False, f"{target_user.mention} ya no tiene token sincronizado."
+
+    steps: list[tuple[discord.abc.User, str, str]] = [
+        (initiator, initiator_token, f".t {target_user.mention}"),
+        (target_user, target_token, ".tac"),
+    ]
+    if initiator_numbers:
+        steps.append((initiator, initiator_token, f".ta {' '.join(initiator_numbers)}"))
+    if target_numbers:
+        steps.append((target_user, target_token, f".ta {' '.join(target_numbers)}"))
+    steps.append((initiator, initiator_token, ".tc"))
+    steps.append((target_user, target_token, ".tc"))
+
+    for index, (acting_user, token, command_text) in enumerate(steps, start=1):
+        try:
+            status, body = await _send_autogami_message(
+                ctx,
+                token,
+                command_text,
+                acting_user_id=acting_user.id,
+            )
+        except Exception as exc:
+            return (
+                False,
+                f"Falló el paso {index}/{len(steps)} (`{command_text}`) para "
+                f"{_display_name_for_user(acting_user)}: {exc}",
+            )
+
+        if not 200 <= status < 300:
+            error_body = body[:250] if body else "sin respuesta"
+            return (
+                False,
+                f"El paso {index}/{len(steps)} (`{command_text}`) devolvió HTTP {status}: {error_body}",
+            )
+
+        context.daily_stats.increment_autogami_uses(
+            ctx.guild.id,
+            ctx.guild.name,
+            acting_user.id,
+            _display_name_for_user(acting_user),
+        )
+
+        if index < len(steps):
+            await asyncio.sleep(AUTOGAMI_TRADE_DELAY_SECONDS)
+
+    return True, "La secuencia automática terminó correctamente."
+
+
+class AutogamiTradeView(discord.ui.View):
+    def __init__(
+        self,
+        *,
+        ctx: commands.Context,
+        initiator: discord.abc.User,
+        target_user: discord.abc.User,
+        initiator_numbers: list[str],
+        target_numbers: list[str],
+    ) -> None:
+        super().__init__(timeout=AUTOGAMI_TRADE_VIEW_TIMEOUT_SECONDS)
+        self.ctx = ctx
+        self.initiator = initiator
+        self.target_user = target_user
+        self.initiator_numbers = initiator_numbers
+        self.target_numbers = target_numbers
+        self.message: discord.Message | None = None
+        self.preview_url: str | None = None
+        self.finished = False
+
+    def _disable_buttons(self) -> None:
+        for child in self.children:
+            if isinstance(child, discord.ui.Button):
+                child.disabled = True
+
+    async def _reject_non_target(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.target_user.id:
+            return False
+
+        if interaction.response.is_done():
+            await interaction.followup.send(
+                f"Solo {self.target_user.mention} puede responder a este trade.",
+                ephemeral=True,
+            )
+        else:
+            await interaction.response.send_message(
+                f"Solo {self.target_user.mention} puede responder a este trade.",
+                ephemeral=True,
+            )
+        return True
+
+    async def on_timeout(self) -> None:
+        if self.finished or self.message is None:
+            return
+
+        self._disable_buttons()
+        self.finished = True
+        with suppress(discord.HTTPException, discord.NotFound):
+            await self.message.edit(
+                embed=_build_autogami_trade_embed(
+                    self.initiator,
+                    self.target_user,
+                    self.initiator_numbers,
+                    self.target_numbers,
+                    status="expired",
+                    preview_url=self.preview_url,
+                ),
+                view=self,
+            )
+
+    @discord.ui.button(label="Aceptar trade", style=discord.ButtonStyle.success)
+    async def accept_trade(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ) -> None:
+        _ = button
+        if await self._reject_non_target(interaction):
+            return
+
+        self.message = interaction.message
+        self.finished = True
+        self._disable_buttons()
+        await interaction.response.edit_message(
+            embed=_build_autogami_trade_embed(
+                self.initiator,
+                self.target_user,
+                self.initiator_numbers,
+                self.target_numbers,
+                status="processing",
+                preview_url=self.preview_url,
+            ),
+            view=self,
+        )
+
+        success, detail = await _execute_autogami_trade_sequence(
+            self.ctx,
+            self.initiator,
+            self.target_user,
+            self.initiator_numbers,
+            self.target_numbers,
+        )
+        final_status = "accepted" if success else "failed"
+        with suppress(discord.HTTPException, discord.NotFound):
+            await interaction.message.edit(
+                embed=_build_autogami_trade_embed(
+                    self.initiator,
+                    self.target_user,
+                    self.initiator_numbers,
+                    self.target_numbers,
+                    status=final_status,
+                    detail=detail,
+                    preview_url=self.preview_url,
+                ),
+                view=self,
+            )
+
+        await interaction.followup.send(
+            embed=_build_autogami_trade_result_embed(
+                self.initiator,
+                self.target_user,
+                self.initiator_numbers,
+                self.target_numbers,
+                success=success,
+                detail=detail,
+            )
+        )
+        self.stop()
+
+    @discord.ui.button(label="Declinar trade", style=discord.ButtonStyle.danger)
+    async def decline_trade(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ) -> None:
+        _ = button
+        if await self._reject_non_target(interaction):
+            return
+
+        self.message = interaction.message
+        self.finished = True
+        self._disable_buttons()
+        await interaction.response.edit_message(
+            embed=_build_autogami_trade_embed(
+                self.initiator,
+                self.target_user,
+                self.initiator_numbers,
+                self.target_numbers,
+                status="declined",
+                preview_url=self.preview_url,
+            ),
+            view=self,
+        )
+        self.stop()
+
+
 async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> None:
     if ctx.guild is None:
         await ctx.send("❌ Este comando solo funciona dentro de un servidor.")
@@ -536,11 +1069,7 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
         )
         return
 
-    batches = [
-        sanitized_numbers[index : index + AUTOGAMI_V_BATCH_SIZE]
-        for index in range(0, len(sanitized_numbers), AUTOGAMI_V_BATCH_SIZE)
-    ]
-    captured_batches: list[tuple[list[str], list[discord.Embed]]] = []
+    batches = _build_autogami_batches(sanitized_numbers)
     show_progress = merge_requested and silent_requested
     progress_message: discord.Message | None = None
 
@@ -549,81 +1078,15 @@ async def _run_autogami_v(ctx: commands.Context, values: tuple[str, ...]) -> Non
             embed=build_loading_embed(title=f"Autogami 0/{len(batches)}", percent=0)
         )
 
-    for index, batch in enumerate(batches, start=1):
-        command_text = f".v {' '.join(batch)}"
-        wait_task: asyncio.Task[discord.Message] | None = None
-        if merge_requested:
-            wait_task = asyncio.create_task(_wait_for_waifugami_response(ctx, batch))
-
-        try:
-            status, body = await _send_autogami_message(
-                ctx,
-                token,
-                command_text,
-                acting_user_id=target_user.id,
-            )
-        except Exception:
-            if wait_task is not None:
-                wait_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await wait_task
-            if show_progress:
-                with suppress(discord.HTTPException, discord.NotFound):
-                    await _update_autogami_progress_message(progress_message, index, len(batches))
-            if index < len(batches):
-                await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
-            continue
-
-        if not 200 <= status < 300:
-            if wait_task is not None:
-                wait_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await wait_task
-            if show_progress:
-                with suppress(discord.HTTPException, discord.NotFound):
-                    await _update_autogami_progress_message(progress_message, index, len(batches))
-            if index < len(batches):
-                await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
-            continue
-
-        context.daily_stats.increment_autogami_uses(
-            ctx.guild.id,
-            ctx.guild.name,
-            target_user.id,
-            _display_name_for_user(target_user),
-        )
-
-        if merge_requested:
-            try:
-                waifugami_response = await wait_task
-            except asyncio.TimeoutError:
-                if show_progress:
-                    with suppress(discord.HTTPException, discord.NotFound):
-                        await _update_autogami_progress_message(progress_message, index, len(batches))
-                if index < len(batches):
-                    await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
-                continue
-
-            response_embeds = list(waifugami_response.embeds)
-            if silent_requested:
-                sent_message_id = _extract_message_id(body)
-                with suppress(discord.HTTPException, discord.Forbidden, discord.NotFound):
-                    await _delete_autogami_silent_messages(
-                        ctx,
-                        token,
-                        target_user.id,
-                        sent_message_id,
-                        waifugami_response,
-                    )
-
-            captured_batches.append((batch, response_embeds))
-
-        if show_progress:
-            with suppress(discord.HTTPException, discord.NotFound):
-                await _update_autogami_progress_message(progress_message, index, len(batches))
-
-        if index < len(batches):
-            await asyncio.sleep(AUTOGAMI_V_DELAY_SECONDS)
+    captured_batches = await _run_autogami_v_batches(
+        ctx,
+        target_user,
+        token,
+        batches,
+        capture_embeds=merge_requested,
+        silent=silent_requested,
+        progress_message=progress_message if show_progress else None,
+    )
 
     if show_progress and progress_message is not None:
         with suppress(discord.HTTPException, discord.Forbidden, discord.NotFound):
@@ -828,6 +1291,133 @@ def register_autogami_commands(bot: commands.Bot, noah_group: commands.Group) ->
         await ctx.send(
             f"✅ El emoji automático de chest ha quedado configurado en `{emoji}`."
         )
+
+    @autogami.command()
+    async def trade(ctx: commands.Context, *values: str) -> None:
+        if ctx.guild is None:
+            await ctx.send("❌ Este comando solo funciona dentro de un servidor.")
+            return
+
+        initiator_numbers, target_user_raw, target_numbers, parse_errors = (
+            _parse_autogami_trade_inputs(values)
+        )
+        if parse_errors:
+            await ctx.send(parse_errors[0])
+            return
+
+        try:
+            target_user = _resolve_autogami_v_target_user(ctx, target_user_raw)
+        except ValueError as exc:
+            await ctx.send(str(exc))
+            return
+
+        if target_user.id == ctx.author.id:
+            await ctx.send("❌ No puedes abrir un trade contigo mismo.")
+            return
+
+        if getattr(target_user, "bot", False):
+            await ctx.send("❌ El usuario objetivo debe ser una persona, no un bot.")
+            return
+
+        context = get_bot_context(ctx.bot)
+        initiator_token = context.autogami_tokens.get_token(ctx.author.id)
+        if initiator_token is None:
+            await ctx.send(
+                "❌ No tienes un token sincronizado. Usa `.noah autogami sync` primero."
+            )
+            return
+
+        target_token = context.autogami_tokens.get_token(target_user.id)
+        if target_token is None:
+            await ctx.send(
+                f"❌ {target_user.mention} no tiene un token sincronizado en Autogami."
+            )
+            return
+
+        loading_message = await ctx.send(
+            embed=build_loading_embed(title="Trade 0/2", percent=0)
+        )
+
+        try:
+            await _update_trade_loading_message(
+                loading_message,
+                title=f"Recopilando oferta de {_display_name_for_user(ctx.author)}",
+                percent=25,
+            )
+            initiator_embeds = await _collect_autogami_trade_embeds(
+                ctx,
+                ctx.author,
+                initiator_numbers,
+            )
+
+            await _update_trade_loading_message(
+                loading_message,
+                title=f"Recopilando oferta de {_display_name_for_user(target_user)}",
+                percent=65,
+            )
+            target_embeds = await _collect_autogami_trade_embeds(
+                ctx,
+                target_user,
+                target_numbers,
+            )
+
+            await _update_trade_loading_message(
+                loading_message,
+                title="Preparando preview del trade",
+                percent=100,
+            )
+
+            preview_buffer: discord.File | None = None
+            embed_preview_url: str | None = None
+            try:
+                preview_png = await asyncio.to_thread(
+                    render_autogami_trade_preview,
+                    _display_name_for_user(ctx.author),
+                    initiator_numbers,
+                    initiator_embeds,
+                    _display_name_for_user(target_user),
+                    target_numbers,
+                    target_embeds,
+                )
+                preview_buffer = discord.File(
+                    preview_png,
+                    filename="autogami_trade_preview.png",
+                )
+                embed_preview_url = "attachment://autogami_trade_preview.png"
+            except Exception:
+                preview_buffer = None
+                embed_preview_url = None
+
+            view = AutogamiTradeView(
+                ctx=ctx,
+                initiator=ctx.author,
+                target_user=target_user,
+                initiator_numbers=initiator_numbers,
+                target_numbers=target_numbers,
+            )
+            send_kwargs = {
+                "embed": _build_autogami_trade_embed(
+                    ctx.author,
+                    target_user,
+                    initiator_numbers,
+                    target_numbers,
+                    status="pending",
+                    preview_url=embed_preview_url,
+                ),
+                "view": view,
+            }
+            if preview_buffer is not None:
+                send_kwargs["file"] = preview_buffer
+
+            sent_message = await ctx.send(
+                **send_kwargs,
+            )
+            view.message = sent_message
+            if sent_message.attachments:
+                view.preview_url = sent_message.attachments[0].url
+        finally:
+            with suppress(discord.HTTPException, discord.Forbidden, discord.NotFound):
+                await loading_message.delete()
 
     @autogami.command(name="v")
     async def autogami_v(ctx: commands.Context, *values: str) -> None:

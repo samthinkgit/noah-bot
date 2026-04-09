@@ -574,6 +574,202 @@ def render_embeds_to_png(embeds: list[discord.Embed]) -> BytesIO | None:
     return buffer
 
 
+def _open_png_buffer(buffer: BytesIO | None) -> Image.Image | None:
+    if buffer is None:
+        return None
+
+    try:
+        image = Image.open(buffer).convert("RGBA")
+    except Exception:
+        return None
+
+    image.load()
+    return image
+
+
+def _fit_image_to_width(image: Image.Image, max_width: int) -> Image.Image:
+    if image.width <= max_width:
+        return image
+
+    scale = max_width / image.width
+    resized_height = max(1, int(image.height * scale))
+    return image.resize((max_width, resized_height), Image.LANCZOS)
+
+
+def _draw_trade_arrow(
+    draw: ImageDraw.ImageDraw,
+    right: int,
+    top: int,
+    *,
+    color: tuple[int, int, int],
+    direction: str,
+) -> None:
+    box_size = 76
+    left = right - box_size
+    bottom = top + box_size
+
+    draw.rounded_rectangle(
+        [left, top, right, bottom],
+        radius=20,
+        fill=(*color, 235),
+    )
+
+    shaft_width = 8
+    margin = 18
+    arrow_points = (
+        [
+            (left + margin, bottom - margin),
+            (right - margin - 10, top + margin + 10),
+        ]
+        if direction == "up_right"
+        else [
+            (right - margin, bottom - margin),
+            (left + margin + 10, top + margin + 10),
+        ]
+    )
+    (start_x, start_y), (end_x, end_y) = arrow_points
+    draw.line(
+        [(start_x, start_y), (end_x, end_y)],
+        fill=(255, 255, 255, 255),
+        width=shaft_width,
+    )
+
+    if direction == "up_right":
+        head = [
+            (end_x, end_y),
+            (end_x - 18, end_y),
+            (end_x, end_y + 18),
+        ]
+    else:
+        head = [
+            (end_x, end_y),
+            (end_x + 18, end_y),
+            (end_x, end_y + 18),
+        ]
+    draw.polygon(head, fill=(255, 255, 255, 255))
+
+
+def _build_trade_section_image(
+    title: str,
+    numbers: list[str],
+    embeds: list[discord.Embed],
+    *,
+    color: tuple[int, int, int],
+    direction: str,
+) -> Image.Image:
+    title_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 34)
+    text_font = ImageFont.truetype("DejaVuSans.ttf", 24)
+    placeholder_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 30)
+
+    merged_image = _open_png_buffer(render_embeds_to_png(embeds))
+    if merged_image is not None:
+        merged_image = _fit_image_to_width(merged_image, 1200)
+
+    canvas_width = 1280 if merged_image is None else max(1280, merged_image.width + 80)
+    placeholder_height = 260
+    canvas_height = 170 + (merged_image.height if merged_image else placeholder_height)
+    canvas = Image.new("RGBA", (canvas_width, canvas_height), (248, 249, 251, 255))
+    draw = ImageDraw.Draw(canvas)
+
+    draw.rounded_rectangle(
+        [8, 8, canvas_width - 8, canvas_height - 8],
+        radius=28,
+        outline=(*color, 255),
+        width=6,
+        fill=(255, 255, 255, 255),
+    )
+
+    draw.text((34, 28), title, font=title_font, fill=(26, 32, 44, 255))
+    numbers_text = " ".join(numbers) if numbers else "Sin cartas"
+    draw.text(
+        (36, 82),
+        f"Oferta: {numbers_text}",
+        font=text_font,
+        fill=(74, 85, 104, 255),
+    )
+
+    _draw_trade_arrow(
+        draw,
+        canvas_width - 28,
+        26,
+        color=color,
+        direction=direction,
+    )
+
+    content_left = 40
+    content_top = 140
+    content_right = canvas_width - 40
+
+    if merged_image is None:
+        draw.rounded_rectangle(
+            [content_left, content_top, content_right, canvas_height - 36],
+            radius=24,
+            fill=(244, 246, 248, 255),
+            outline=(215, 219, 224, 255),
+            width=3,
+        )
+        placeholder_text = "Sin imagenes recopiladas"
+        if not numbers:
+            placeholder_text = "Sin cartas en esta oferta"
+
+        bbox = draw.textbbox((0, 0), placeholder_text, font=placeholder_font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+        draw.text(
+            (
+                content_left + ((content_right - content_left) - text_width) // 2,
+                content_top + ((canvas_height - 36 - content_top) - text_height) // 2,
+            ),
+            placeholder_text,
+            font=placeholder_font,
+            fill=(120, 128, 140, 255),
+        )
+        return canvas
+
+    image_left = content_left + ((content_right - content_left) - merged_image.width) // 2
+    canvas.paste(merged_image, (image_left, content_top), merged_image)
+    return canvas
+
+
+def render_autogami_trade_preview(
+    author_name: str,
+    author_numbers: list[str],
+    author_embeds: list[discord.Embed],
+    target_name: str,
+    target_numbers: list[str],
+    target_embeds: list[discord.Embed],
+) -> BytesIO:
+    top_section = _build_trade_section_image(
+        f"{author_name} entrega",
+        author_numbers,
+        author_embeds,
+        color=(34, 197, 94),
+        direction="up_right",
+    )
+    bottom_section = _build_trade_section_image(
+        f"{target_name} entrega",
+        target_numbers,
+        target_embeds,
+        color=(239, 68, 68),
+        direction="up_left",
+    )
+
+    spacing = 24
+    canvas_width = max(top_section.width, bottom_section.width)
+    canvas_height = top_section.height + bottom_section.height + spacing + 32
+    canvas = Image.new("RGBA", (canvas_width, canvas_height), (232, 236, 241, 255))
+
+    top_x = (canvas_width - top_section.width) // 2
+    bottom_x = (canvas_width - bottom_section.width) // 2
+    canvas.paste(top_section, (top_x, 0), top_section)
+    canvas.paste(bottom_section, (bottom_x, top_section.height + spacing), bottom_section)
+
+    buffer = BytesIO()
+    canvas.save(buffer, format="PNG")
+    buffer.seek(0)
+    return buffer
+
+
 # Helper function to parse embed metadata from
 # `.v <waifu id>` from waifugami
 def _parse_embed_metadata(embed):
