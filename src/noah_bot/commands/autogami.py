@@ -1385,8 +1385,20 @@ def register_autogami_commands(bot: commands.Bot, noah_group: commands.Group) ->
                 )
                 embed_preview_url = "attachment://autogami_trade_preview.png"
             except Exception:
-                preview_buffer = None
-                embed_preview_url = None
+                fallback_preview = await asyncio.to_thread(
+                    render_autogami_trade_preview,
+                    _display_name_for_user(ctx.author),
+                    initiator_numbers,
+                    [],
+                    _display_name_for_user(target_user),
+                    target_numbers,
+                    [],
+                )
+                preview_buffer = discord.File(
+                    fallback_preview,
+                    filename="autogami_trade_preview.png",
+                )
+                embed_preview_url = "attachment://autogami_trade_preview.png"
 
             view = AutogamiTradeView(
                 ctx=ctx,

@@ -430,6 +430,45 @@ class DiscordImageRenderer:
 
         return font
 
+    def _draw_missing_image_placeholder(
+        self,
+        canvas: Image.Image,
+        *,
+        x: int,
+        y: int,
+        label: str,
+    ) -> tuple[int, int]:
+        draw = ImageDraw.Draw(canvas)
+        box = [x, y, x + self.image_size[0], y + self.image_size[1]]
+        draw.rounded_rectangle(
+            box,
+            radius=24,
+            fill=(231, 235, 239, 255),
+            outline=(189, 199, 209, 255),
+            width=3,
+        )
+
+        missing_font = self._fit_font_to_width(
+            draw,
+            label,
+            "DejaVuSans-Bold.ttf",
+            self.image_size[0] - 40,
+            28,
+        )
+        bbox = draw.textbbox((0, 0), label, font=missing_font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+        draw.text(
+            (
+                x + (self.image_size[0] - text_width) // 2,
+                y + (self.image_size[1] - text_height) // 2,
+            ),
+            label,
+            font=missing_font,
+            fill=(99, 110, 123, 255),
+        )
+        return x, y
+
     def render(self, images: list[dict]) -> Image.Image:
         count = len(images)
         if count == 0:
@@ -458,19 +497,26 @@ class DiscordImageRenderer:
                 self.image_size[1] + self.title_height + self.padding
             )
 
-            img = self._download_image(data["url"])
-            img.thumbnail(self.image_size)
-
-            img_x = x + (self.image_size[0] - img.width) // 2
-            img_y = y
-
-            canvas.paste(img, (img_x, img_y), img)
+            img: Image.Image | None = None
+            try:
+                img = self._download_image(data["url"])
+                img.thumbnail(self.image_size)
+                img_x = x + (self.image_size[0] - img.width) // 2
+                img_y = y
+                canvas.paste(img, (img_x, img_y), img)
+            except Exception:
+                img_x, img_y = self._draw_missing_image_placeholder(
+                    canvas,
+                    x=x,
+                    y=y,
+                    label="No image",
+                )
 
             if meta.get("favorite"):
                 emoji = meta["favorite"]
                 emoji_url = self._emoji_to_twemoji_url(emoji)
 
-                if emoji_url:
+                if emoji_url and img is not None:
                     try:
                         emoji_img = self._download_image(emoji_url)
                         emoji_img = emoji_img.resize((48, 48), Image.LANCZOS)
@@ -490,7 +536,7 @@ class DiscordImageRenderer:
                     except Exception:
                         pass
 
-            if meta.get("local_id"):
+            if meta.get("local_id") and img is not None:
                 local_id = meta["local_id"]
 
                 font = self.font_big
