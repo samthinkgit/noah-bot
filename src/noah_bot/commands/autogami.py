@@ -13,6 +13,7 @@ from noah_bot.modules.discord_formatter import (
     build_loading_embed,
     render_autogami_trade_preview,
     render_embeds_to_png,
+    render_embeds_to_png_horizontal,
 )
 from noah_bot.modules.send_message import delete_message, send_message
 
@@ -537,6 +538,37 @@ def _build_autogami_trade_result_embed(
     if detail:
         embed.add_field(name="Detalle", value=detail, inline=False)
     return embed
+
+
+def _build_autogami_trade_offer_files(
+    initiator: discord.abc.User,
+    initiator_embeds: list[discord.Embed],
+    target_user: discord.abc.User,
+    target_embeds: list[discord.Embed],
+) -> list[discord.File]:
+    files: list[discord.File] = []
+
+    initiator_buffer = render_embeds_to_png_horizontal(initiator_embeds)
+    if initiator_buffer is not None:
+        files.append(
+            discord.File(
+                initiator_buffer,
+                filename=f"trade_offer_{initiator.id}.png",
+                description=f"Oferta visual de {_display_name_for_user(initiator)}",
+            )
+        )
+
+    target_buffer = render_embeds_to_png_horizontal(target_embeds)
+    if target_buffer is not None:
+        files.append(
+            discord.File(
+                target_buffer,
+                filename=f"trade_offer_{target_user.id}.png",
+                description=f"Oferta visual de {_display_name_for_user(target_user)}",
+            )
+        )
+
+    return files
 
 
 def _extract_message_id(response_body: str) -> str | None:
@@ -1395,6 +1427,17 @@ def register_autogami_commands(bot: commands.Bot, noah_group: commands.Group) ->
                 initiator_numbers=initiator_numbers,
                 target_numbers=target_numbers,
             )
+            offer_files = await asyncio.to_thread(
+                _build_autogami_trade_offer_files,
+                ctx.author,
+                initiator_embeds,
+                target_user,
+                target_embeds,
+            )
+            all_files: list[discord.File] = []
+            if preview_buffer is not None:
+                all_files.append(preview_buffer)
+            all_files.extend(offer_files)
             send_kwargs = {
                 "embed": _build_autogami_trade_embed(
                     ctx.author,
@@ -1406,8 +1449,8 @@ def register_autogami_commands(bot: commands.Bot, noah_group: commands.Group) ->
                 ),
                 "view": view,
             }
-            if preview_buffer is not None:
-                send_kwargs["file"] = preview_buffer
+            if all_files:
+                send_kwargs["files"] = all_files
 
             sent_message = await ctx.send(
                 **send_kwargs,

@@ -375,6 +375,7 @@ class DiscordImageRenderer:
         padding=40,
         image_size=(300, 300),
         title_height=50,
+        max_columns: int = 5,
     ):
 
         self.font_path_bold = "arialbd.ttf"
@@ -382,6 +383,7 @@ class DiscordImageRenderer:
         self.padding = padding
         self.image_size = image_size
         self.title_height = title_height
+        self.max_columns = max_columns
 
         self.font_bold = ImageFont.truetype("DejaVuSans-Bold.ttf", 22)
         self.font_big = ImageFont.truetype("DejaVuSans-Bold.ttf", 40)
@@ -433,9 +435,9 @@ class DiscordImageRenderer:
         if count == 0:
             return Image.new("RGBA", (1, 1), (0, 0, 0, 0))
 
-        MAX_COLS = 5
-        cols = min(count, MAX_COLS)
-        rows = (count + MAX_COLS - 1) // MAX_COLS
+        max_cols = max(1, self.max_columns)
+        cols = min(count, max_cols)
+        rows = (count + max_cols - 1) // max_cols
 
         canvas_width = cols * self.image_size[0] + (cols + 1) * self.padding
         canvas_height = (
@@ -560,18 +562,30 @@ def collect_embed_images(embeds: list[discord.Embed]) -> list[dict]:
     return images
 
 
-def render_embeds_to_png(embeds: list[discord.Embed]) -> BytesIO | None:
+def render_embeds_to_png(
+    embeds: list[discord.Embed],
+    *,
+    max_columns: int = 5,
+) -> BytesIO | None:
     images = collect_embed_images(embeds)
     if not images:
         return None
 
-    renderer = DiscordImageRenderer()
+    renderer = DiscordImageRenderer(max_columns=max_columns)
     final_image = renderer.render(images)
 
     buffer = BytesIO()
     final_image.save(buffer, format="PNG")
     buffer.seek(0)
     return buffer
+
+
+def render_embeds_to_png_horizontal(embeds: list[discord.Embed]) -> BytesIO | None:
+    images = collect_embed_images(embeds)
+    if not images:
+        return None
+
+    return render_embeds_to_png(embeds, max_columns=len(images))
 
 
 def _open_png_buffer(buffer: BytesIO | None) -> Image.Image | None:
@@ -661,7 +675,7 @@ def _build_trade_section_image(
     text_font = ImageFont.truetype("DejaVuSans.ttf", 24)
     placeholder_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 30)
 
-    merged_image = _open_png_buffer(render_embeds_to_png(embeds))
+    merged_image = _open_png_buffer(render_embeds_to_png_horizontal(embeds))
     if merged_image is not None:
         merged_image = _fit_image_to_width(merged_image, 1200)
 
