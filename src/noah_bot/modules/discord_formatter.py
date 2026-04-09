@@ -580,14 +580,6 @@ def render_embeds_to_png(
     return buffer
 
 
-def render_embeds_to_png_horizontal(embeds: list[discord.Embed]) -> BytesIO | None:
-    images = collect_embed_images(embeds)
-    if not images:
-        return None
-
-    return render_embeds_to_png(embeds, max_columns=len(images))
-
-
 def _open_png_buffer(buffer: BytesIO | None) -> Image.Image | None:
     if buffer is None:
         return None
@@ -608,6 +600,28 @@ def _fit_image_to_width(image: Image.Image, max_width: int) -> Image.Image:
     scale = max_width / image.width
     resized_height = max(1, int(image.height * scale))
     return image.resize((max_width, resized_height), Image.LANCZOS)
+
+
+def _trade_bundle_columns(count: int) -> int:
+    if count <= 1:
+        return 1
+    if count <= 4:
+        return 2
+    if count <= 9:
+        return 3
+    return 4
+
+
+def _render_trade_bundle_image(embeds: list[discord.Embed]) -> Image.Image | None:
+    images = collect_embed_images(embeds)
+    if not images:
+        return None
+
+    buffer = render_embeds_to_png(
+        embeds,
+        max_columns=_trade_bundle_columns(len(images)),
+    )
+    return _open_png_buffer(buffer)
 
 
 def _draw_trade_arrow(
@@ -663,6 +677,33 @@ def _draw_trade_arrow(
     draw.polygon(head, fill=(255, 255, 255, 255))
 
 
+def _draw_trade_owner_badge(
+    draw: ImageDraw.ImageDraw,
+    *,
+    left: int,
+    top: int,
+    text: str,
+    color: tuple[int, int, int],
+    font: ImageFont.FreeTypeFont,
+) -> None:
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    badge_width = text_width + 34
+    badge_height = text_height + 20
+    draw.rounded_rectangle(
+        [left, top, left + badge_width, top + badge_height],
+        radius=18,
+        fill=(*color, 235),
+    )
+    draw.text(
+        (left + 17, top + 10),
+        text,
+        font=font,
+        fill=(255, 255, 255, 255),
+    )
+
+
 def _build_trade_section_image(
     title: str,
     numbers: list[str],
@@ -671,17 +712,18 @@ def _build_trade_section_image(
     color: tuple[int, int, int],
     direction: str,
 ) -> Image.Image:
-    title_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 34)
+    badge_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 22)
     text_font = ImageFont.truetype("DejaVuSans.ttf", 24)
     placeholder_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 30)
 
-    merged_image = _open_png_buffer(render_embeds_to_png_horizontal(embeds))
+    merged_image = _render_trade_bundle_image(embeds)
     if merged_image is not None:
-        merged_image = _fit_image_to_width(merged_image, 1200)
+        merged_image = _fit_image_to_width(merged_image, 1160)
 
-    canvas_width = 1280 if merged_image is None else max(1280, merged_image.width + 80)
+    canvas_width = 1280 if merged_image is None else max(1280, merged_image.width + 120)
     placeholder_height = 260
-    canvas_height = 170 + (merged_image.height if merged_image else placeholder_height)
+    content_height = (merged_image.height + 48) if merged_image else placeholder_height
+    canvas_height = 210 + content_height
     canvas = Image.new("RGBA", (canvas_width, canvas_height), (248, 249, 251, 255))
     draw = ImageDraw.Draw(canvas)
 
@@ -693,10 +735,17 @@ def _build_trade_section_image(
         fill=(255, 255, 255, 255),
     )
 
-    draw.text((34, 28), title, font=title_font, fill=(26, 32, 44, 255))
+    _draw_trade_owner_badge(
+        draw,
+        left=34,
+        top=26,
+        text=title,
+        color=color,
+        font=badge_font,
+    )
     numbers_text = " ".join(numbers) if numbers else "Sin cartas"
     draw.text(
-        (36, 82),
+        (36, 88),
         f"Oferta: {numbers_text}",
         font=text_font,
         fill=(74, 85, 104, 255),
@@ -711,17 +760,19 @@ def _build_trade_section_image(
     )
 
     content_left = 40
-    content_top = 140
+    content_top = 144
     content_right = canvas_width - 40
+    content_bottom = canvas_height - 36
+
+    draw.rounded_rectangle(
+        [content_left, content_top, content_right, content_bottom],
+        radius=24,
+        fill=(244, 246, 248, 255),
+        outline=(*color, 180),
+        width=4,
+    )
 
     if merged_image is None:
-        draw.rounded_rectangle(
-            [content_left, content_top, content_right, canvas_height - 36],
-            radius=24,
-            fill=(244, 246, 248, 255),
-            outline=(215, 219, 224, 255),
-            width=3,
-        )
         placeholder_text = "Sin imagenes recopiladas"
         if not numbers:
             placeholder_text = "Sin cartas en esta oferta"
@@ -732,7 +783,7 @@ def _build_trade_section_image(
         draw.text(
             (
                 content_left + ((content_right - content_left) - text_width) // 2,
-                content_top + ((canvas_height - 36 - content_top) - text_height) // 2,
+                content_top + ((content_bottom - content_top) - text_height) // 2,
             ),
             placeholder_text,
             font=placeholder_font,
@@ -741,7 +792,8 @@ def _build_trade_section_image(
         return canvas
 
     image_left = content_left + ((content_right - content_left) - merged_image.width) // 2
-    canvas.paste(merged_image, (image_left, content_top), merged_image)
+    image_top = content_top + 24
+    canvas.paste(merged_image, (image_left, image_top), merged_image)
     return canvas
 
 
