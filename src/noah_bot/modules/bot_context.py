@@ -9,6 +9,7 @@ from noah_bot.modules.discord_formatter import UserEmojiManager
 from noah_bot.modules.leaderboard import Leaderboard
 from noah_bot.modules.relics_game import RelicsGameManager
 from noah_bot.modules.steallist import StealList
+from noah_bot.modules.tts import TTSVoiceStore
 from noah_bot.modules.voice_manager import VoiceManager
 from noah_bot.modules.waifu_game import WaifuGameManager
 
@@ -21,6 +22,7 @@ class BotContext:
     steallist: StealList = field(default_factory=StealList)
     autogami_tokens: AutogamiTokenStore = field(default_factory=AutogamiTokenStore)
     voice_manager: VoiceManager = field(default_factory=VoiceManager)
+    tts_voices: TTSVoiceStore = field(default_factory=TTSVoiceStore)
     waifu_manager: WaifuGameManager = field(
         default_factory=lambda: WaifuGameManager(json_path="waifu_game.json")
     )

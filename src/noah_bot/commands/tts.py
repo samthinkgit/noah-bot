@@ -8,6 +8,7 @@ import discord
 from discord.ext import commands
 
 from noah_bot.modules.bot_context import get_bot_context
+from noah_bot.modules.discord_formatter import EmbedTable
 from noah_bot.modules.tts import text_to_speech
 
 
@@ -44,8 +45,9 @@ def _disable_greet(bot: commands.Bot, guild_id: int | None) -> None:
 async def _play_tts(
     voice_client: discord.VoiceClient,
     text: str,
+    voice_id: str,
 ) -> None:
-    stream = text_to_speech(text)
+    stream = text_to_speech(text, voice_id=voice_id)
     audio_bytes = b"".join(stream)
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
@@ -75,7 +77,68 @@ def register_tts_commands(bot: commands.Bot, noah_group: commands.Group) -> None
     @noah_group.group()
     async def tts(ctx: commands.Context) -> None:
         if ctx.invoked_subcommand is None:
-            await ctx.send("Use `.noah tts join`, `.noah tts say` or `.noah tts greet`.")
+            await ctx.send(
+                "Use `.noah tts join`, `.noah tts say`, `.noah tts greet`, "
+                "`.noah tts showvoices`, `.noah tts addvoice`, `.noah tts delvoice` "
+                "or `.noah tts setvoice`."
+            )
+
+    @tts.command()
+    async def showvoices(ctx: commands.Context) -> None:
+        context = get_bot_context(ctx.bot)
+        voices = context.tts_voices.list_voices()
+
+        table = EmbedTable(
+            headers=["Name", "Voice ID", "Active"],
+            title="🗣️ Noah TTS Voices",
+            description="Voces disponibles para `.noah tts say` y `.noah tts greet`.",
+            color=discord.Color.blurple(),
+            max_columns=3,
+        )
+
+        for voice in voices:
+            table.add_row(
+                [
+                    str(voice["name"]),
+                    str(voice["voice_id"]),
+                    "✅" if bool(voice["active"]) else "",
+                ]
+            )
+
+        await ctx.send(embed=table.render())
+
+    @tts.command()
+    async def addvoice(ctx: commands.Context, voice_id: str, *, name: str) -> None:
+        context = get_bot_context(ctx.bot)
+        if not context.tts_voices.add_voice(voice_id=voice_id, name=name):
+            await ctx.send("❌ Invalid params. Use `.noah tts addvoice <voiceid> <name>`.")
+            return
+
+        await ctx.send(f"✅ Voice **{name.strip()}** added.")
+
+    @tts.command()
+    async def delvoice(ctx: commands.Context, *, name: str) -> None:
+        context = get_bot_context(ctx.bot)
+        deleted = context.tts_voices.delete_voice(name=name)
+        if not deleted:
+            await ctx.send("❌ Voice not found or cannot be deleted.")
+            return
+
+        active_voice_name = context.tts_voices.get_active_voice()["name"]
+        await ctx.send(
+            f"🗑️ Voice **{name.strip()}** deleted. Active voice: **{active_voice_name}**."
+        )
+
+    @tts.command()
+    async def setvoice(ctx: commands.Context, *, name: str) -> None:
+        context = get_bot_context(ctx.bot)
+        changed = context.tts_voices.set_active_voice(name=name)
+        if not changed:
+            await ctx.send("❌ Voice not found. Use `.noah tts showvoices`.")
+            return
+
+        active_voice = context.tts_voices.get_active_voice()
+        await ctx.send(f"🎙️ Active TTS voice set to **{active_voice['name']}**.")
 
     @tts.command()
     async def join(ctx: commands.Context) -> None:
@@ -109,8 +172,11 @@ def register_tts_commands(bot: commands.Bot, noah_group: commands.Group) -> None
             await ctx.send("❌ Noah is not in a voice channel. Use `.noah tts join`.")
             return
 
+        context = get_bot_context(ctx.bot)
+        active_voice = context.tts_voices.get_active_voice()
+
         try:
-            await _play_tts(ctx.voice_client, text)
+            await _play_tts(ctx.voice_client, text, voice_id=active_voice["voice_id"])
         except Exception as exc:
             await ctx.send(f"❌ TTS failed: `{exc}`")
 
@@ -144,6 +210,7 @@ def register_tts_commands(bot: commands.Bot, noah_group: commands.Group) -> None
     ) -> None:
         guild = member.guild
         context = get_bot_context(bot)
+        active_voice = context.tts_voices.get_active_voice()
         tracked_channel_id = context.tts_greet_sessions.get(guild.id)
         if tracked_channel_id is None:
             return
@@ -177,7 +244,11 @@ def register_tts_commands(bot: commands.Bot, noah_group: commands.Group) -> None
                     return
 
                 try:
-                    await _play_tts(voice_client, farewell_text)
+                    await _play_tts(
+                        voice_client,
+                        farewell_text,
+                        voice_id=active_voice["voice_id"],
+                    )
                 except Exception:
                     _disable_greet(bot, guild.id)
             return
@@ -216,6 +287,10 @@ def register_tts_commands(bot: commands.Bot, noah_group: commands.Group) -> None
                 _disable_greet(bot, guild.id)
                 return
 
-            await _play_tts(voice_client, greet_text)
+            await _play_tts(
+                voice_client,
+                greet_text,
+                voice_id=active_voice["voice_id"],
+            )
         except Exception:
             _disable_greet(bot, guild.id)
