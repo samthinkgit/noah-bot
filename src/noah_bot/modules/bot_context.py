@@ -7,6 +7,8 @@ from noah_bot.modules.autogami import AutogamiTokenStore
 from noah_bot.modules.daily_stats import DailyStatsManager
 from noah_bot.modules.discord_formatter import UserEmojiManager
 from noah_bot.modules.leaderboard import Leaderboard
+from noah_bot.modules.noah_gochi import NoahGochiManager
+from noah_bot.modules.noah_gochi_ai import NoahGochiStoryService
 from noah_bot.modules.relics_game import RelicsGameManager
 from noah_bot.modules.steallist import StealList
 from noah_bot.modules.tts import TTSVoiceStore
@@ -28,6 +30,12 @@ class BotContext:
     )
     relics_manager: RelicsGameManager = field(
         default_factory=lambda: RelicsGameManager(json_path="noah_relics.json")
+    )
+    gochi_manager: NoahGochiManager = field(
+        default_factory=lambda: NoahGochiManager(json_path="noah_gochi.json")
+    )
+    gochi_story_service: NoahGochiStoryService = field(
+        default_factory=NoahGochiStoryService
     )
     daily_stats: DailyStatsManager = field(default_factory=DailyStatsManager)
     autogami_claim_messages: dict[int, int] = field(default_factory=dict)
