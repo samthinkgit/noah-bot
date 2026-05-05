@@ -95,6 +95,10 @@ def _require_guild(ctx: commands.Context) -> bool:
     return ctx.guild is not None
 
 
+def _is_admin(ctx: commands.Context) -> bool:
+    return isinstance(ctx.author, discord.Member) and ctx.author.guild_permissions.administrator
+
+
 def _normalize_trait_value(trait_key: str, raw_value: str) -> str:
     value = " ".join(raw_value.split()).strip()
     lowered = value.lower()
@@ -784,6 +788,113 @@ def register_gotchi_commands(noah_group: commands.Group) -> None:
         manager.mark_interaction_used(ctx.guild.id, ctx.author.id, target_user_id)
 
     @gochi.command()
+    async def test(
+        ctx: commands.Context,
+        user: discord.Member | None = None,
+    ) -> None:
+        if not _require_guild(ctx):
+            await ctx.send("❌ Este comando solo funciona dentro de un servidor.")
+            return
+
+        if not _is_admin(ctx):
+            await ctx.send("❌ Solo los administradores pueden usar este comando.")
+            return
+
+        context = get_bot_context(ctx.bot)
+        manager = context.gochi_manager
+        actor_snapshot = manager.build_profile_snapshot(ctx.guild.id, ctx.author.id)
+        if actor_snapshot is None:
+            await ctx.send("❌ Primero crea tu Noah Gochi con `.noah gochi new <nombre>`.")
+            return
+
+        if user is None:
+            candidates = [
+                user_id
+                for user_id in manager.list_character_user_ids(ctx.guild.id)
+                if user_id != str(ctx.author.id)
+            ]
+            if not candidates:
+                await ctx.send("❌ No hay otro Noah Gochi disponible para probar.")
+                return
+            target_user_id = context.gochi_manager.rng.choice(candidates)
+            target_member = ctx.guild.get_member(int(target_user_id))
+            if target_member is None:
+                await ctx.send("❌ No he podido resolver el usuario objetivo.")
+                return
+        else:
+            if user.id == ctx.author.id:
+                await ctx.send("❌ El test de interaccion requiere otro usuario.")
+                return
+            target_member = user
+            target_user_id = str(user.id)
+
+        target_snapshot = manager.build_profile_snapshot(ctx.guild.id, target_user_id)
+        if target_snapshot is None:
+            await ctx.send("❌ Ese usuario aun no tiene Noah Gochi.")
+            return
+
+        relation_snapshot = manager.build_relation_snapshot(
+            ctx.guild.id,
+            ctx.author.id,
+            target_user_id,
+        )
+        request = _build_story_request(
+            guild_name=ctx.guild.name,
+            mode="interaction",
+            actor_snapshot=actor_snapshot,
+            target_snapshot=target_snapshot,
+            server_topics=manager.get_topics(ctx.guild.id),
+            relation_snapshot=relation_snapshot,
+        )
+
+        try:
+            response = context.gochi_story_service.generate_interaction_story(request)
+        except Exception as exc:
+            await ctx.send(f"❌ El test de Noah Gochi falló al generar la interaccion: {exc}")
+            return
+
+        if not response.options:
+            await ctx.send("❌ El test generó una interaccion sin opciones.")
+            return
+
+        selected_option = context.gochi_manager.rng.choice(response.options)
+        embed = discord.Embed(
+            title=f"{response.title} [TEST]",
+            description=response.scene_description,
+            color=discord.Color.orange(),
+        )
+        embed.add_field(name="Situacion", value=response.result_text, inline=False)
+        embed.add_field(
+            name="Decision simulada",
+            value=(
+                f"{selected_option.emoji} **{selected_option.label}**\n"
+                f"{selected_option.description}"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Impacto simulado en la relacion",
+            value=_format_relation_delta_lines(selected_option.relation_deltas),
+            inline=False,
+        )
+        embed.add_field(
+            name=f"Cambios simulados de {actor_snapshot['name']}",
+            value=_format_state_delta_lines(selected_option.actor_state_deltas),
+            inline=False,
+        )
+        embed.add_field(
+            name=f"Cambios simulados de {target_snapshot['name']}",
+            value=_format_state_delta_lines(selected_option.target_state_deltas),
+            inline=False,
+        )
+        if target_snapshot.get("image_url"):
+            embed.set_image(url=target_snapshot["image_url"])
+        else:
+            embed.set_image(url=target_member.display_avatar.url)
+        embed.set_footer(text="Modo test: no guarda cambios, no consume cooldowns.")
+        await ctx.send(embed=embed)
+
+    @gochi.command()
     async def relation(ctx: commands.Context, user: discord.Member) -> None:
         if not _require_guild(ctx):
             await ctx.send("❌ Este comando solo funciona dentro de un servidor.")
@@ -845,6 +956,7 @@ def register_gotchi_commands(noah_group: commands.Group) -> None:
         embed.add_field(name="Poner imagen", value="`.noah gochi setimage`", inline=False)
         embed.add_field(name="Daily", value="`.noah gochi daily`", inline=False)
         embed.add_field(name="Interactuar", value="`.noah gochi interact [@usuario]`", inline=False)
+        embed.add_field(name="Test admin", value="`.noah gochi test [@usuario]`", inline=False)
         embed.add_field(name="Relacion", value="`.noah gochi relation @usuario`", inline=False)
         embed.add_field(name="Tema del server", value="`.noah gochi addtopic <tema>`", inline=False)
         await ctx.send(embed=embed)
